@@ -25,6 +25,7 @@ contract SimpleStorage {
         // from the balance of the smart contract
         tvm.accept();
 
+        // set variable to the passed initial value
         variable = _initial_value;
     }
 
@@ -37,7 +38,7 @@ contract SimpleStorage {
     }
 
     // Function that adds its argument to the state variable.
-    function set(uint _value) public checkOwnerAndAccept {
+    function set(uint _value) external checkOwnerAndAccept {
         variable = _value;
     }
 }
