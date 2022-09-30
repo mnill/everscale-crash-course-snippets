@@ -1,0 +1,43 @@
+pragma ever-solidity >= 0.61.2;
+// This header informs sdk which will create the external message has to be signed by a key.
+// Also directing the compiler that it should only accepted signed external messages
+pragma AbiHeader pubkey;
+
+contract SimpleStorage {
+
+    uint static public random_number;
+
+    // State variable for storing value
+    uint public variable = 0;
+
+    constructor(uint _initial_value) public {
+        // We check that the conract has a pubkey set.
+        // tvm.pubkey() - is essentially a static variable,
+        // which is set at the moment of the creation of the contract,
+        // We can set any pubkey here or just leave it empty.
+        require(tvm.pubkey() != 0, 101);
+        // msg.pubkey() - public key with which the message was signed,
+        // it can be  0 if the pragma AbiHeader pubkey has not been defined;
+        // We check that the constructor was called by a message signed by a private key
+        // from that pubkey that was set when the contract was deployed.
+        require(msg.pubkey() == tvm.pubkey(), 102);
+        // we agree to pay for the transaction calling the constructor
+        // from the balance of the smart contract
+        tvm.accept();
+
+        variable = _initial_value;
+    }
+
+    // Modifier that allows to accept some external messages
+    modifier checkOwnerAndAccept {
+        // Check that message was signed with contracts key.
+        require(msg.pubkey() == tvm.pubkey(), 102);
+        tvm.accept();
+        _;
+    }
+
+    // Function that adds its argument to the state variable.
+    function set(uint _value) public checkOwnerAndAccept {
+        variable = _value;
+    }
+}
