@@ -1,10 +1,12 @@
-pragma ever-solidity >= 0.61.2;
+pragma ever-solidity >= 0.64.0;
+
 // This header informs sdk which will create the external message has to be signed by a key.
 // Also directing the compiler that it should only accepted signed external messages
 pragma AbiHeader pubkey;
 
 contract SimpleStorage {
 
+    // Just random static variable to see the difference between static and state variables in the deploy process.
     uint static public random_number;
 
     // State variable for storing value
@@ -37,7 +39,7 @@ contract SimpleStorage {
         _;
     }
 
-    // Function that adds its argument to the state variable.
+    // Function that set its argument to the state variable.
     function set(uint _value) external checkOwnerAndAccept {
         variable = _value;
     }
