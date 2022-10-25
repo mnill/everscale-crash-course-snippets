@@ -2,12 +2,14 @@ pragma ever-solidity >= 0.64.0;
 
 library Errors {
     uint16 constant NON_ZERO_PUBLIC_KEY                             = 1000;
-    uint16 constant NOT_OWNER                                       = 1001;
-    uint16 constant BET_VALUE_TOO_SMALL                             = 1002;
-    uint16 constant INSUFFICIENT_BALANCE                            = 1003;
+    uint16 constant ZERO_OWNER                                      = 1001;
+    uint16 constant NOT_OWNER                                       = 1002;
+    uint16 constant BET_VALUE_TOO_SMALL                             = 1003;
+    uint16 constant INSUFFICIENT_BALANCE                            = 1004;
 }
 
 contract Dice {
+    // We do not set AbiHeader pubkey; because our contract will not accept external messages at all.
 
     address static owner;
 
@@ -17,14 +19,26 @@ contract Dice {
         // Contract pub key is NOT set
         require(tvm.pubkey() == 0, Errors.NON_ZERO_PUBLIC_KEY);
 
-        // Constructor called by the owner
+        // Owner must be set
+        require(owner.value != 0, Errors.ZERO_OWNER);
+
+        // Constructor called by the owner. This check is not necessary in this contract because our constructor
+        // has no params. As you remember address of the contract is hash(code + tvm.pubkey + static variables), so
+        // if you have address + static variables you can proof which one was set on deploy time. But constructor can
+        // be called by anyone and there you often need to check is constructor caller authorized contract.
+        // You will realize more about it in the next chapter "distributed programming
         require(msg.sender == owner, Errors.NOT_OWNER);
-        tvm.accept();
     }
 
-    modifier checkOwnerAndAccept {
+    function maxBet() public view returns (uint128) {
+        // view method to call off-chain to get max bet
+        if (address(this).balance < 0.5 ever * 6)
+            return 0;
+        return address(this).balance / 6;
+    }
+
+    modifier checkOwner {
         require(msg.sender == owner, Errors.NOT_OWNER);
-        tvm.accept();
         _;
     }
 
@@ -35,7 +49,8 @@ contract Dice {
         // check that our contract has enough balance to payout. address(this).balance already includes msg.value.
         require(address(this).balance >= msg.value * 6, Errors.INSUFFICIENT_BALANCE);
 
-        // shuffle rnd
+        // Shuffle rnd. This is toy random and teoretically can be manipulated by collator. Do not use it in serious
+        // production.
         rnd.shuffle();
 
         // get random result
@@ -72,24 +87,18 @@ contract Dice {
             // this in the "Carefully working with the value" page of this chapter.
 
             // So we have the incoming message with > 0.5 EVERs and if the player wins we just reserve
-            // address(this).balance - msg.value * 6 ever on this smart contract and send all the left value
+            // address(this).balance - msg.value * 6 on this smart contract and send all the left value
             // after paying the gas fee of the transaction back to the winner. So we will send back to the winner
             // (msg.value * 6 minus all the gas fees). Pretty straightforward in my opinion.
         }
     }
 
-    function cashOut(address to, uint128 value) external checkOwnerAndAccept {
-        require(to.value != 0);
-        to.transfer({
-            value: value,
+    function cashOut(address _to, uint128 _value) external checkOwner {
+        require(_to.value != 0);
+        _to.transfer({
+            value: _value,
             flag: 0,
-            bounce: false
+            bounce: true
         });
-    }
-
-    function maxBet() public view returns (uint128) {
-        if (address(this).balance < 0.5 ever * 6)
-            return 0;
-        return address(this).balance / 6;
     }
 }

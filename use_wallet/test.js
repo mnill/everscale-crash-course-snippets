@@ -8,9 +8,8 @@ const { libNode } = require("@eversdk/lib-node");
 
 TonClient.useBinaryLibrary(libNode);
 
-const { DiceContract } = require("./artifacts/DiceContract")
-const { SetcodeMultisigContract } = require("./artifacts/SetcodeMultisigContract")
-const {stateInitSourceStateInit} = require("@eversdk/core");
+const { DiceContract } = require("./artifacts/DiceContract");
+const { SetcodeMultisigContract } = require("./artifacts/SetcodeMultisigContract");
 
 // We create a client connection to the local node
 const client = new TonClient({
@@ -102,7 +101,7 @@ async function main(client) {
     await casinoOwnerMultisig.run('submitTransaction', {
       dest: diceContractAddress,
       value: 9_000_000_000, // 9 evers
-      bounce: false,
+      bounce: true,
       allBalance: false,
       payload: diceDeployMessage,
       stateInit: diceContractStateInit
@@ -110,6 +109,7 @@ async function main(client) {
 
     console.log('Dice contract deployed, max bet is', nanoEversToEvers((await diceContract.runLocal('maxBet', {}, {})).decoded.output.value0));
 
+    // In the same way we create multisig for the player
     let playerMultisig = new Account(SetcodeMultisigContract, {
       signer: signerKeys(players_keys),
       client,
@@ -118,7 +118,6 @@ async function main(client) {
 
     const playerMultisigAddress = await casinoOwnerMultisig.getAddress();
 
-    // Deploy msig with 1 owner for casino owner
     await playerMultisig.deploy({
       useGiver: true,
       initInput: {
