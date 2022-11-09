@@ -1,0 +1,1 @@
+This repo contains code samples from everscale crash course

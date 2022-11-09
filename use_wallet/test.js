@@ -51,7 +51,7 @@ async function main(client) {
       signer: signerNone(),
       client,
       initData: {
-        owner: casinoOwnerMultisigAddress
+        owner_: casinoOwnerMultisigAddress
       },
     });
 
@@ -59,7 +59,7 @@ async function main(client) {
     let initData = (await client.abi.encode_initial_data({
       abi: diceContract.abi,
       initial_data: {
-        owner: casinoOwnerMultisigAddress
+        owner_: casinoOwnerMultisigAddress
       },
       initial_pubkey: `0x0000000000000000000000000000000000000000000000000000000000000000` // if zero pubkey must be such string
     })).data
@@ -170,14 +170,17 @@ async function main(client) {
         in_msg: result.transaction.in_msg,
         abi_registry: [playerMultisig.abi, diceContract.abi]});
 
-      let wonLogMessage = transaction_tree.messages.find(m => m.src === diceContractAddress && m.decoded_body && m.decoded_body.name === 'Win');
-      if (wonLogMessage) {
-        console.log('We won', nanoEversToEvers(wonLogMessage.decoded_body.value.amount), 'Evers');
+      // Look for game event log
+      let gameLogMessage = transaction_tree.messages.find(m => m.src === diceContractAddress && m.decoded_body && m.decoded_body.name === 'Game');
+      if (!gameLogMessage)
+        throw new Error('Game not found');
+
+      if (gameLogMessage.decoded_body.value.prize !== '0') {
+        console.log('We won', nanoEversToEvers(gameLogMessage.decoded_body.value.prize), 'Evers');
         break;
       } else {
         console.log('Lose!')
       }
-
       await sleep(1);
     }
 

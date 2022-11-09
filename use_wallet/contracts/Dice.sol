@@ -11,23 +11,22 @@ library Errors {
 contract Dice {
     // We do not set AbiHeader pubkey; because our contract will not accept external messages at all.
 
-    address static owner;
-
-    event Win(address winner, uint128 amount);
+    address static owner_;
+    event Game(address player, uint8 bet, uint8 result,  uint128 prize);
 
     constructor() public {
         // Contract pub key is NOT set
         require(tvm.pubkey() == 0, Errors.NON_ZERO_PUBLIC_KEY);
 
         // Owner must be set
-        require(owner.value != 0, Errors.ZERO_OWNER);
+        require(owner_.value != 0, Errors.ZERO_OWNER);
 
         // Constructor called by the owner. This check is not necessary in this contract because our constructor
         // has no params. As you remember address of the contract is hash(code + tvm.pubkey + static variables), so
         // if you have address + static variables you can proof which one was set on deploy time. But constructor can
         // be called by anyone and there you often need to check is constructor caller authorized contract.
         // You will realize more about it in the next chapter "distributed programming
-        require(msg.sender == owner, Errors.NOT_OWNER);
+        require(msg.sender == owner_, Errors.NOT_OWNER);
     }
 
     function maxBet() public view returns (uint128) {
@@ -38,7 +37,7 @@ contract Dice {
     }
 
     modifier checkOwner {
-        require(msg.sender == owner, Errors.NOT_OWNER);
+        require(msg.sender == owner_, Errors.NOT_OWNER);
         _;
     }
 
@@ -54,17 +53,17 @@ contract Dice {
         rnd.shuffle();
 
         // get random result
-        uint8 dice_result_ = rnd.next(6);  // 0..5
+        uint8 dice_result_value = rnd.next(6);  // 0..5
 
         // if player won
-        if (_bet_dice_value == dice_result_) {
+        if (_bet_dice_value == dice_result_value) {
 
             // tvm.rawReserve - it is like to send amount of EVERs to your self
             // there we first send to our self (address(this).balance - msg.value * 6)
             tvm.rawReserve(address(this).balance - msg.value * 6, 2);
 
             // Send an external message from the contract to no where. It is a log message to easily catch all wins off-chain
-            emit Win(msg.sender, msg.value * 6);
+            emit Game(msg.sender, _bet_dice_value, dice_result_value, msg.value * 6);
 
             // Then we send all LEFT amount of value to the player. Read below why so.
             msg.sender.transfer({value: 0, flag: 128, bounce: false});
@@ -90,6 +89,8 @@ contract Dice {
             // address(this).balance - msg.value * 6 on this smart contract and send all the left value
             // after paying the gas fee of the transaction back to the winner. So we will send back to the winner
             // (msg.value * 6 minus all the gas fees). Pretty straightforward in my opinion.
+        } else {
+            emit Game(msg.sender, _bet_dice_value, dice_result_value, 0);
         }
     }
 
