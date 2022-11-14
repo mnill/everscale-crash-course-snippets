@@ -5,6 +5,7 @@ const {
   signerNone,
 } = require("@eversdk/core");
 const { libNode } = require("@eversdk/lib-node");
+const BigNumber = require('bignumber.js');
 
 TonClient.useBinaryLibrary(libNode);
 
@@ -144,14 +145,18 @@ async function main(client) {
     })).body;
 
     for (let i = 0; i < 100; i++) {
-      let maxBet = (await diceContract.runLocal('maxBet', {}, {})).decoded.output.value0;
-      if (maxBet < 0.6 * 1_000_000_000) {
+      // We use bignumber because it is good practise, maximum safe int in js is only 9_000_000 evers
+      // https://stackoverflow.com/questions/307179/what-is-javascripts-highest-integer-value-that-a-number-can-go-to-without-losin
+
+      let maxBet = new BigNumber((await diceContract.runLocal('maxBet', {}, {})).decoded.output.value0);
+      if (maxBet.lt(0.6 * 1_000_000_000)) {
         console.log('Dice contract has not enough balance to play');
         break;
       }
-      let ourBalance = await playerMultisig.getBalance();
+      let ourBalance = new BigNumber(await playerMultisig.getBalance());
+
       // 0.7 because 0.6 + gas;
-      if (ourBalance < 0.7 * 1_000_000_000) {
+      if (ourBalance.lt(0.7 * 1_000_000_000)) {
         console.log('We have not enough Evers to play');
         break;
       }
