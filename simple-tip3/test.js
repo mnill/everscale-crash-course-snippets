@@ -8,7 +8,7 @@ const BigNumber = require('bignumber.js');
 
 TonClient.useBinaryLibrary(libNode);
 
-// Primitives to encode bocs
+// Primitives to encode TVMCell
 const u = (size, x) => {
     if (size === 256) {
         return builderOpBitString(`x${BigInt(x).toString(16).padStart(64, "0")}`)

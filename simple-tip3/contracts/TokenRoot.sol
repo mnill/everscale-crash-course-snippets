@@ -1,8 +1,5 @@
 pragma ever-solidity >= 0.64.0;
 
-pragma AbiHeader expire;
-pragma AbiHeader pubkey;
-
 import "./TokenWallet.sol";
 import "./interfaces/ITokenRoot.sol";
 import "./libraries/Errors.sol";
@@ -108,6 +105,10 @@ contract TokenRoot is ITokenRoot {
     uint128 deployWalletValue
   ) override public responsible returns (address tokenWallet)
   {
+    // This is public function. Anyone can call it to deploy a token wallet for any owner
+    // Also this function marked as responsible
+    // so it will send back address of the deployed token wallet
+
     require(walletOwner.value != 0, Errors.WRONG_WALLET_OWNER);
 
     // We always reserve some amount of tokens on the account balance to keep it
@@ -120,9 +121,12 @@ contract TokenRoot is ITokenRoot {
     tokenWallet = _deployWallet(stateInit, deployWalletValue);
 
     // This function marked as responsible
-    // Responsible is the special sugar for async calls which one awaiting for the answer.
-    // When someone call responsible function solidity add a variable uint32 answerId
-    // AnswerID is not a unique id of the call, this is just a functionID which one must
+    // Responsible is the special sugar for async calls which one waiting for the answer.
+    // When someone calls responsible he must specify callback -
+    // a function of the sender contract with the same arguments as
+    // the responsible function returns.
+    // solidity adds a hidden variable in the responsible function signature - uint32 answerId
+    // AnswerID is not a unique id of the call, this is just a functionID that one must
     // Be called in the back message with variables this function return.
 
     // Look at ThirdParty.sol for example how to call responsible function from the another smart contract
@@ -166,6 +170,12 @@ contract TokenRoot is ITokenRoot {
     tvm.rawReserve(TokenGas.TARGET_ROOT_BALANCE, 0);
 
     TvmCell stateInit = _buildWalletInitData(recipient);
+
+    // Be aware, address recipient - is not an address of target wallet contract
+    // recipient is the address of the wallet owner!
+    // The same logic also in EverWallet extension.
+    // When you send tokens to someone to specify the wallet owner address,
+    // wallet address calculate under the hood.
 
     address recipientWallet;
 

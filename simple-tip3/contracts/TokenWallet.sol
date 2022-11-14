@@ -42,7 +42,7 @@ contract TokenWallet is ITokenWallet {
         owner_: walletOwner
       },
       pubkey: 0,
-      code: tvm.code()
+      code: tvm.code() // The same code as our contract has
     });
   }
 

@@ -1,8 +1,5 @@
 pragma ever-solidity >= 0.64.0;
 
-pragma AbiHeader expire;
-pragma AbiHeader pubkey;
-
 import "./interfaces/ITokenRoot.sol";
 import "./interfaces/ITokenWallet.sol";
 import "./interfaces/IAcceptTokensTransferCallback.sol";
@@ -68,7 +65,7 @@ contract TokenDice is IAcceptTokensTransferCallback {
     // answerID - just ID of function contract must call in the answer
     // So return { value: 0, flag: TokenMsgFlag.ALL_NOT_RESERVED, bounce: false } tokenWallet
     // in the deployWallet function will be compiled to something like
-    // msg.sender.call{value: 0, flag: TokenMsgFlag.ALL_NOT_RESERVED, bounce: false}(answerId, tokenWallet)
+    // msg.sender.call{value: 0, flag: TokenMsgFlag.ALL_NOT_RESERVED, bounce: false, function:answerId}(tokenWallet)
 
     // There is no built-in check to make sure this function
     // is truly being called in answer to your call.
@@ -96,6 +93,14 @@ contract TokenDice is IAcceptTokensTransferCallback {
   ) override external onlyOurWallet {
     tvm.rawReserve(1 ever, 0);
     balance_ += amount;
+
+    // To roll a dice player must transfer some tokens to
+    // our wallet, and set notify = true, payload = TVMCell(encode(uint8 bet_dice_value))
+
+    // After successful transfer our wallet will call this callback
+    // and we run game logic.
+    // Look at test.js to figure out how to transfer some tokens with
+    // attached data. How to make frontend we will cover in next chapter.
 
     // We got some new tokens on the our wallet.
     // To slice to decode data in payload
