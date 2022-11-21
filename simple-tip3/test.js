@@ -8,23 +8,6 @@ const BigNumber = require('bignumber.js');
 
 TonClient.useBinaryLibrary(libNode);
 
-// Primitives to encode TVMCell
-const u = (size, x) => {
-    if (size === 256) {
-        return builderOpBitString(`x${BigInt(x).toString(16).padStart(64, "0")}`)
-    } else {
-        return builderOpInteger(size, x);
-    }
-}
-const u8 = x => u(8, x);
-const u32 = x => u(32, x);
-const u128 = x => u(128, x);
-const u256 = x => u(256, x);
-const b0 = u(1, 0);
-const b1 = u(1, 0);
-const bits = x => builderOpBitString(x);
-
-
 const { TokenRootContract } = require("./artifacts/TokenRootContract.js")
 const { TokenWalletContract } = require("./artifacts/TokenWalletContract.js")
 const { TokenDiceContract } = require("./artifacts/TokenDiceContract.js")
@@ -353,10 +336,13 @@ async function main(client) {
         });
 
         // Encode payload TVMCell to pass data with token transfers
-        const encodedDiceBetValue = (await client.boc.encode_boc({
-            builder: [
-                u8(5), // Encode 5 as uint8
+        const encodedDiceBetValue = (await client.abi.encode_boc({
+            params: [
+                { name: "_bet_dice_value", type: "uint8" },
             ],
+            data: {
+                "_bet_dice_value": "5",
+            }
         })).boc;
 
         const playMessage = (await client.abi.encode_message_body({
@@ -379,7 +365,6 @@ async function main(client) {
 
         // try to play
         for (let i = 0; i < 1000; i++) {
-
             let maxBet = new BigNumber((await diceContract.runLocal('maxBet', {}, {})).decoded.output.value0);
             let ourBalance = new BigNumber((await user2TokenWalletContract.runLocal('balance', {answerId: 0}, {})).decoded.output.value0);
 
