@@ -1,4 +1,4 @@
-pragma ever-solidity >= 0.64.0;
+pragma ever-solidity >= 0.62.0;
 
 // This header informs sdk which will create the external message has to be signed by a key.
 // Also directing the compiler that it should only accepted signed external messages

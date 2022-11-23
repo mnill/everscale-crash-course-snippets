@@ -1,0 +1,33 @@
+pragma ever-solidity >= 0.62.0;
+
+import "broxus-ton-tokens-contracts/contracts/interfaces/ITokenRoot.sol";
+import "./libraries/TokenMsgFlag.sol";
+
+// Just a simple proxy contract to allow anyone to mint the tokens
+// We will transfer ownership of our tip3 token to this contract
+// To allow to any users to mint tokens for playing dice
+contract AnyOwner {
+
+  address static tokenRoot_;
+
+  constructor() public {
+    tvm.rawReserve(0.1 ever, 0);
+    tvm.accept();
+  }
+
+  function mint(
+    uint128 amount,
+    address recipient,
+    uint128 deployWalletValue,
+    address remainingGasTo,
+    bool notify,
+    TvmCell payload
+  ) external {
+    tvm.rawReserve(0.1 ever, 0);
+    ITokenRoot(tokenRoot_).mint{
+      value: 0,
+      bounce: false,
+      flag: TokenMsgFlag.ALL_NOT_RESERVED
+    }(amount, recipient, deployWalletValue, remainingGasTo, notify, payload);
+  }
+}

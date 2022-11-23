@@ -47,8 +47,9 @@ async function main(client) {
     // initInput - it is variables that will be passed to the constructor.
 
     // Note: the contract address is not dependent on the variables we will send to the constructor.
-
-    await simpleStorageInstance.deploy({useGiver: true, initInput: {
+    await simpleStorageInstance.deploy({
+      useGiver: true,
+      initInput: {
         _initial_value: '0x1'
       }})
     console.log(`Simple storage deployed at : ${simpleStorageInstanceAddress}`);

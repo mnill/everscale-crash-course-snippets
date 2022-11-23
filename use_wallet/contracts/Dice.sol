@@ -1,4 +1,4 @@
-pragma ever-solidity >= 0.64.0;
+pragma ever-solidity >= 0.62.0;
 
 library Errors {
     uint16 constant NON_ZERO_PUBLIC_KEY                             = 1000;
@@ -33,7 +33,7 @@ contract Dice {
         // view method to call off-chain to get max bet
         if (address(this).balance < 0.5 ever * 6)
             return 0;
-        return address(this).balance / 6;
+        return address(this).balance / 5;
     }
 
     modifier checkOwner {

@@ -1,9 +1,9 @@
 pragma ever-solidity >= 0.62.0;
 
-import "./interfaces/ITokenRoot.sol";
-import "./interfaces/ITokenWallet.sol";
-import "./interfaces/IAcceptTokensTransferCallback.sol";
-import "./interfaces/IAcceptTokensMintCallback.sol";
+import "broxus-ton-tokens-contracts/contracts/interfaces/ITokenRoot.sol";
+import "broxus-ton-tokens-contracts/contracts/interfaces/ITokenWallet.sol";
+import "broxus-ton-tokens-contracts/contracts/interfaces/IAcceptTokensTransferCallback.sol";
+import "broxus-ton-tokens-contracts/contracts/interfaces/IAcceptTokensMintCallback.sol";
 import "./libraries/TokenMsgFlag.sol";
 
 library DiceErrors {
@@ -187,7 +187,6 @@ contract TokenDice is IAcceptTokensTransferCallback, IAcceptTokensMintCallback {
     }
 
     TvmCell empty;
-
     ITokenWallet(tokenWallet_).transfer{value: 0, bounce: true, flag: TokenMsgFlag.ALL_NOT_RESERVED}(
       amount,
       to,
