@@ -31,10 +31,13 @@ async function main() {
     // There are three options for deploying a TokenRoot
     // The first one is a simple deployment with an external message.
     // So we will just set a temporarily pubkey to it, to be sure the contract's
-    // constructor is called correctly, all future
+    // constructor is called correctly.
+    // ( The message which one called the constructor is
+    // signed by owner of static variable - pubkey ).
 
     // The second one is deploying by an internal message with stateInit,
-    // like we deployed in the simple-tip3 example.
+    // like we deployed in the simple-tip3 example. From the
+    // address which one is set as a owner of the TokenRoot.
 
     // And the third one is using a special "deployer" contract.
     // It is like fabric for contracts to support deployment for wallets
@@ -50,10 +53,17 @@ async function main() {
     const initialSupplyTo = zeroAddress;
     // How many tokens mint after deploy to initialSupplyTo
     const initialSupply = '0';
-
+    // Disable future minting of the new tokens
+    const disableMint = false;
+    // Disable ability of the root owner to burn user's tokens
+    const disableBurnByRoot = false;
+    // Is users can burn their tokens.
+    // Useful in some applications like bridges.
+    const pauseBurn = false;
     // How many nano evers use to deploy wallet if initial supplier
     const initialDeployWalletValue = '0';
 
+    // TokenRoot static params:
     // Owner of the root contract (can mint or burn tokens)
     const rootOwner = ownerMsig.address;
     // Name of the token
@@ -62,13 +72,7 @@ async function main() {
     const symbol = "UD";
     // Decimals - 9
     const decimals = 9;
-    // Disable future minting of the new tokens
-    const disableMint = false;
-    // Disable ability of the root owner to burn user's tokens
-    const disableBurnByRoot = false;
-    // Is users can burn their tokens.
-    // Useful in some applications like bridges.
-    const pauseBurn = false;
+
 
 
     const { contract: tokenRoot } = await locklift.factory.deployContract({
