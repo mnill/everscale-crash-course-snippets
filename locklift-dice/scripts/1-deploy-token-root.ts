@@ -1,13 +1,11 @@
-import {Address, WalletTypes, zeroAddress} from "locklift";
-import {errorExtractor} from "locklift/src/utils";
-import {MergeInputObjectsArray} from "everscale-inpage-provider/dist/models";
+import {zeroAddress} from "locklift";
 import {GetMsig2ForSigner} from "./utils";
 import BigNumber from "bignumber.js";
 
 async function main() {
-    // There we check is we need to deploy TIP3ROOT/TOKENDICE contract owner msig2
     const signer = (await locklift.keystore.getSigner("0"))!;
 
+    // There we check is we need to deploy TIP3ROOT/TOKENDICE contract owner msig2
     // Get Msig for Owner, must be already deployed,
     const ownerMsig = await GetMsig2ForSigner(signer, false, '0');
 

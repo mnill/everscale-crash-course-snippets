@@ -6,7 +6,6 @@ async function main() : Promise<any> {
 
     // There we check is we need to deploy TIP3ROOT/TOKENDICE contract owner msig2
     const msig2 = await GetMsig2ForSigner(signer, true, locklift.utils.toNano(20));
-
     console.log('Msig2 deployed at', msig2.address.toString())
 }
 
