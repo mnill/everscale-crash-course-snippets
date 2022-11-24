@@ -23,7 +23,7 @@ const config: LockliftConfig = {
     // Specify config for extarnal contracts as in exapmple
     externalContracts: {
       "node_modules/broxus-ton-tokens-contracts/build": ['TokenRootUpgradeable', 'TokenWalletUpgradeable', 'TokenWalletPlatform'],
-      "contracts/third_party/multisig2": ['SetcodeMultisig']
+      "third_party_contracts/multisig2": ['SetcodeMultisig']
     },
   },
   linker: {
