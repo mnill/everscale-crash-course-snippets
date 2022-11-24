@@ -41,7 +41,7 @@ async function main() {
     const tokenWalletAddress = (await TokenRoot.methods.walletOf({answerId: 0, walletOwner: mintTo}).call()).value0;
     const TokenWallet = locklift.factory.getDeployedContract('TokenWalletUpgradeable', tokenWalletAddress);
 
-    const {value0: tokenWalletBalance} = await TokenWallet.methods.balance({answerId: 0}).call();
+    const {value0: tokenWalletBalance} = await TokenWallet.methods.balance({ answerId: 0 }).call();
     const { value0: totalSupply } = await TokenRoot.methods.totalSupply({ answerId: 0 }).call();
 
     console.log(`Tokens minted to ${mintTo.toString()}, wallet balance is ${tokenWalletBalance}, total supply is ${totalSupply}`);

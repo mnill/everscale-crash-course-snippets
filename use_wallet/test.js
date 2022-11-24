@@ -108,6 +108,33 @@ async function main(client) {
       stateInit: diceContractStateInit
     })
 
+    // SIMPLIFIED how submitTransaction of msig2 looks like:
+    // But if your msig2 has more than 1 custodian they will be putted into queue
+    // and will wait for confirmation from other custodians
+    //   function submitTransaction(
+    //     address dest,
+    //     uint128 value,
+    //     bool bounce,
+    //     bool allBalance,
+    //     TvmCell payload,
+    //     TvmCell stateInit
+    // ) {
+    //       require(msg.pubkey() == m_ownerKey, 100);
+    //       uint8 flags = FLAG_IGNORE_ERRORS(1) | FLAG_PAY_FWD_FEE_FROM_BALANCE(2);
+    //       if (allBalance) {
+    //           flags = FLAG_IGNORE_ERRORS(1) | FLAG_SEND_ALL_REMAINING(128);
+    //           value = 0;
+    //       }
+    //       dest.transfer({
+    //         value: value,
+    //         bounce: bounce,
+    //         flag: sendFlags,
+    //         body: payload,
+    //         stateInit: stateInit
+    //     });
+    //   }
+
+
     console.log('Dice contract deployed, max bet is', nanoEversToEvers((await diceContract.runLocal('maxBet', {}, {})).decoded.output.value0));
 
     // In the same way we create multisig for the player
