@@ -1,4 +1,4 @@
-import {Address, WalletTypes} from "locklift";
+import {Address} from "locklift";
 import {checkIsContractDeployed, GetMsig2ForSigner} from "./utils";
 
 async function main() {
@@ -9,7 +9,7 @@ async function main() {
     const mintTo = ownerMsig.address;
 
     // Put there address of the token root the previous script.
-    const tokenRootAddress = '0:6150a51bb1275396c3a4289c86847f1497d7ea8241c9504047be0ec9304ee66c';
+    const tokenRootAddress = '0:ee0eafb66766d3fa04fd3746d5802acf8de6c427a6222ae328a95915aef98517';
 
     await checkIsContractDeployed(new Address(tokenRootAddress), 'TokenRootUpgradeable')
     const TokenRoot = locklift.factory.getDeployedContract('TokenRootUpgradeable', new Address(tokenRootAddress));

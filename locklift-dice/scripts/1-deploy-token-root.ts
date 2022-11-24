@@ -74,13 +74,12 @@ async function main() {
     const decimals = 9;
 
 
-
     const { contract: tokenRoot } = await locklift.factory.deployContract({
         contract: "TokenRootUpgradeable",
         publicKey: signer.publicKey,
         //Static variables
         initParams: {
-            randomNonce_: locklift.utils.getRandomNonce(),
+            randomNonce_: '0',
             rootOwner_: rootOwner,
             name_: name,
             symbol_: symbol,

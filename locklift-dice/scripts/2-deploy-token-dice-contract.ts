@@ -8,7 +8,7 @@ async function main() {
     const ownerMsig = await GetMsig2ForSigner(signer, false, '0');
 
     // Put there address of the token root the previous script.
-    const tokenRootAddress = '0:6150a51bb1275396c3a4289c86847f1497d7ea8241c9504047be0ec9304ee66c';
+    const tokenRootAddress = '0:ee0eafb66766d3fa04fd3746d5802acf8de6c427a6222ae328a95915aef98517';
     await checkIsContractDeployed(new Address(tokenRootAddress), 'TokenRoot')
 
     // We will deploy TokenDice.sol by the internal message from our msig2.
@@ -16,6 +16,8 @@ async function main() {
 
     // Calculate the state init for tvc and initial params.
     // StateInit - code + static variables, to deploy the contract
+    // Also this function return address of the future contract
+    // Because address it is a hash(stateInit)
     const {address: diceContractAddress, stateInit: stateInit} = await locklift.provider.getStateInit(TokenDice.abi, {
         workchain: 0,
         tvc: TokenDice.tvc,
