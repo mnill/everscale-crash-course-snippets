@@ -1,84 +1,119 @@
-const { Account } = require("@eversdk/appkit");
-const { TonClient, signerKeys, signerNone } = require("@eversdk/core");
-const { libNode } = require("@eversdk/lib-node");
+const { Address, ProviderRpcClient } = require('everscale-inpage-provider');
+const { EverscaleStandaloneClient } = require('everscale-standalone-client/nodejs');
+const { SimpleStorageContract } = require("./artifacts/SimpleStorageContract");
+const { SimpleKeystore } = require("everscale-standalone-client/client/keystore");
+const { getGiverKeypair, getTokensFromGiver } = require("./giver");
 
-TonClient.useBinaryLibrary(libNode);
-
-const { SimpleStorageContract } = require("./artifacts/SimpleStorageContract")
-
-// We create a client connection to the local node
-const client = new TonClient({
-  network: {
-    // Local EVER OS SE instance URL here
-    endpoints: [ "http://localhost" ]
-  }
+const keyStore = new SimpleKeystore();
+const ever = new ProviderRpcClient({
+  // We setup fallback provider
+  // in browser environment provider will try to
+  // connect to the EverWallet first
+  fallback: () =>
+    EverscaleStandaloneClient.create({
+      connection: {
+        id: 1, // connection id
+        type: 'graphql',
+        group: "localnet",
+        data: {
+          endpoints: ['127.0.0.1'],
+          latencyDetectionInterval: 1000,
+          local: true,
+        },
+      },
+      keystore: keyStore
+    }),
 });
 
 
-async function main(client) {
+async function main() {
   try {
-    // generate random keys pair
-    const keys = await TonClient.default.crypto.generate_random_sign_keys();
+    // Add giver keypair to provider keystore
+    // Giver is a generic name for any smart contract
+    // that is used to send Ever's for deploying
+    // smart contracts by an external message.
 
-    // Create an instance of contract.
-    // To create an instance we need to specify
-    // * signer - keypair to sign an external messages we will send to this contract. keys.public is the same key is tvm.pubkey()
-    // * client - a client to a blockchain
-    // * initData - it is initial values for all STATIC variables.
+    // The local node has a pre-deployed giver
+    // with a simple interface. Add their keypair
+    // to the keyStore, because provider
+    // always looking into keystore to find a keypair
+    // to sign an external message.
+    keyStore.addKeyPair(getGiverKeypair());
 
-    let simpleStorageInstance= new Account(SimpleStorageContract, {
-      signer: signerKeys(keys),
-      client,
-      initData: {
-        random_number: Math.floor(Math.random() * 100)
-      },
+    // Generate a random keypair to set as owner of
+    // our SimpleStorage contract. In production, you
+    // of course need to import this keypair.
+    const keyPair = SimpleKeystore.generateKeyPair();
+    keyStore.addKeyPair(keyPair);
+
+
+    // Calculate a stateInit of our contract.
+
+    // StateInit - it is a packed contract Code and InitialData(storage)
+
+    // If you need to deploy a contract you need to attach
+    // StateInit to the message (Internal or External)
+    // If the target contract is not deployed before the transaction
+    // starts validator will check is hash(stateInit) == address
+    // of the destination contract.
+
+    // If they match validator will initialize contract by the
+    // given code + initialData from the stateInit.
+
+    // We also got expectedAddress, because address is just hash(stateInit)
+    const {address: expectedAddress, stateInit} = await ever.getStateInit(SimpleStorageContract.abi, {
+      // Tvc it is code + zeroInitial data.
+      // function will replace zero data to actual
+      // from initParams.
+      tvc: SimpleStorageContract.tvc,
+      workchain: 0,
+      publicKey: keyPair.publicKey,
+      initParams: {
+        random_number: Math.floor(Math.random() * 10000)
+      }
     });
 
-    // Contract address is always a hash(hash(contract_code) + hash(initial value of all static variables)).
-    // So now when we have known contract code and all initial data we can calculate future address of the contract.
-    const simpleStorageInstanceAddress = await simpleStorageInstance.getAddress();
+    // So to deploy smart-contract by the external message we need to
+    // send some tokens with bounce: false flag to their address first.
+    // After it account state will change their status
+    // from NotExist to NotInitialized.
+    // Local node has pre-deployed giver. For the testnet/mainnet
+    // You need to setup giver by yourself.
+    // Check "Setup environment for testnet/mainnet" article
+    // to figure out how to do this.
+    await getTokensFromGiver(ever, expectedAddress, 1_000_000_000); // 1 ever = 1_000_000_000 nanoEvers
 
-    // Note: that is tvm.pubkey() is also a static variable. Just a hidden one.
-    // So our contract address depend on CODE + random_number + keys.pubkey
+    // Now we can send an external message to our account
+    const contract = new ever.Contract(SimpleStorageContract.abi, expectedAddress);
 
-    // Deploy our contract.
-    // We use param useGiver: true - this is mean sdk will use pre-deployed wallet with EVERs on the local network to
-    // send a necessary amount of EVERs to the contract to deploy it.
-    // initInput - it is variables that will be passed to the constructor.
+    // We just send an external message to our contract
+    // that one will call constructor with arguments _initial_value = 1
+    // And also we attach stateInit to our message,
+    // because our contract must be initialized first.
 
-    // Note: the contract address is not dependent on the variables we will send to the constructor.
-    await simpleStorageInstance.deploy({
-      useGiver: true,
-      initInput: {
-        _initial_value: '0x1'
-      }})
-    console.log(`Simple storage deployed at : ${simpleStorageInstanceAddress}`);
+    await extractError(contract.methods.constructor({_initial_value: 1}).sendExternal({
+      stateInit: stateInit,
+      // Provider will search for the signer for this pubkey in the keyStore
+      publicKey: keyPair.publicKey,
+    }))
 
+    // Call view method 'get'.
+    // To do this, sdk will download full account state and run TVM locally
+    let {value0: variableValue} = await contract.methods.get({}).call({});
+    console.log('Account successfully deployed at address', expectedAddress.toString(), 'variable is set to', variableValue);
 
-    // Note: you can also create an instance of the contract not only by specifying a pubkey and static variables and just
-    // by the address. Like this:
-    // simpleStorageInstance = new Account(SimpleStorageContract, {
-    //   signer: signerNone(),
-    //   client,
-    //   address: simpleStorageInstanceAddress
-    // });
+    console.log('Set variable to 42')
+    await extractError(contract.methods.set({_value: 42}).sendExternal({
+      publicKey: keyPair.publicKey,
+    }))
 
-    // runLocal - a way to call a view methods of the contracts.
-    // sdk will download current account state + code and execute tvm locally to get the answer.
+    let {value0: newVariableValue} = await contract.methods.get({}).call({});
 
-    let response = await simpleStorageInstance.runLocal("variable", {});
-    console.log('After deploy variable param is', response.decoded.output.variable);
-
-    // run - send an external message to the contract. Specified signer will be used to sign the message.
-    console.log('Set variable to 0xFF');
-    await simpleStorageInstance.run("set", {
-      _value: 0xFF
-    });
-
-    console.log('Success');
-
-    response = await simpleStorageInstance.runLocal("variable", {});
-    console.log('Now variable param is', response.decoded.output.variable);
+    if (newVariableValue !== '42') {
+      throw new Error('Variable is not 42')
+    } else {
+      console.log('Success, variable value is', newVariableValue);
+    }
 
     console.log("Test successful");
   } catch (e) {
@@ -86,17 +121,21 @@ async function main(client) {
   }
 }
 
+async function extractError(transactionPromise) {
+  return transactionPromise.then(res => {
+    if (res.transaction.aborted) {
+      throw new Error(`Transaction aborted with code ${transaction.exitCode}`)
+    }
+    return res;
+  });
+}
+
 (async () => {
   try {
-    console.log("Hello localhost EVER!");
-    await main(client);
+    console.log("Hello EVER!");
+    await main();
     process.exit(0);
   } catch (error) {
-    if (error.code === 504) {
-      console.error(`Network is inaccessible. You have to start TON OS SE using \`tondev se start\`.\n If you run SE on another port or ip, replace http://localhost endpoint with http://localhost:port or http://ip:port in index.js file.`);
-    } else {
-      console.error(error);
-    }
+    console.error(error);
   }
-  client.close();
 })();

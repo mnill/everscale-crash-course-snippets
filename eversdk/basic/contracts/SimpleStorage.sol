@@ -10,7 +10,7 @@ contract SimpleStorage {
     uint static public random_number;
 
     // State variable for storing value
-    uint variable = 0;
+    uint public variable = 0;
 
     constructor(uint _initial_value) public {
         // We check that the conract has a pubkey set.
@@ -37,10 +37,6 @@ contract SimpleStorage {
         require(msg.pubkey() == tvm.pubkey(), 102);
         tvm.accept();
         _;
-    }
-
-    function get() public view returns(uint) {
-        return variable;
     }
 
     // Function that set its argument to the state variable.

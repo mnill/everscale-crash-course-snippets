@@ -2,8 +2,9 @@
   "name": "basic",
   "version": "1.0.0",
   "dependencies": {
-    "everscale-inpage-provider": "^0.3.45",
-    "everscale-standalone-client": "^2.1.5"
+    "@eversdk/appkit": "^0.3.1",
+    "@eversdk/core": "^1.37.2",
+    "@eversdk/lib-node": "^1.37.2"
   },
   "scripts": {
     "build": "mkdir -p artifacts && everdev sol compile -o ./artifacts contracts/SimpleStorage.sol",
