@@ -2,14 +2,13 @@
   "name": "basic",
   "version": "1.0.0",
   "dependencies": {
-    "@eversdk/appkit": "^0.3.1",
-    "@eversdk/core": "^1.37.2",
-    "@eversdk/lib-node": "^1.37.2",
-    "bignumber.js": "^9.1.0"
+    "bignumber.js": "^9.1.0",
+    "everscale-inpage-provider": "^0.3.45",
+    "everscale-standalone-client": "^2.1.5"
   },
   "scripts": {
-    "build": "mkdir -p artifacts && everdev sol compile -o ./artifacts contracts/Dice.sol",
-    "wrapjs": "everdev js wrap ./artifacts/Dice.abi.json && everdev js wrap -o ../../../artifacts/SetcodeMultisigContract.js ./contracts/third_party/multisig2/SetcodeMultisig.abi.json",
+    "build": "mkdir -p artifacts && everdev sol compile -o ./artifacts contracts/SimpleStorage.sol",
+    "wrapjs": "everdev js wrap ./artifacts/SimpleStorage.abi.json",
     "test": "npm run build && npm run wrapjs && node test.js"
   }
 }
