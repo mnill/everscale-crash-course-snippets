@@ -1,55 +1,48 @@
 import {Address} from "locklift";
-import {checkIsContractDeployed, GetMsig2ForSigner} from "./utils";
+import {checkIsContractDeployed} from "./utils";
+import {EverWalletAccount} from "everscale-standalone-client/nodejs";
 
 async function main() {
-    const signer = (await locklift.keystore.getSigner("0"))!;
+  const signer = (await locklift.keystore.getSigner("0"))!;
+  const diceOwnerWallet = await EverWalletAccount.fromPubkey({publicKey: signer.publicKey, workchain: 0});
+  // We need to add our EverWallet as account to provider
+  // to use .send({from: 'address'})
+  await locklift.factory.accounts.storage.addAccount(diceOwnerWallet);
 
-    // Get Msig for Owner, must be already deployed,
-    const ownerMsig = await GetMsig2ForSigner(signer, false, '0');
-    const mintTo = ownerMsig.address;
+  const mintTo = diceOwnerWallet.address;
 
-    // Put there address of the token root the previous script.
-    const tokenRootAddress = '0:ee0eafb66766d3fa04fd3746d5802acf8de6c427a6222ae328a95915aef98517';
+  // Put there address of the token root the previous script.
+  const tokenRootAddress = '0:cb5f57378e82174ed95502b01df16235d8d94e974ce24a4dc8a10143f23c0c44';
 
-    await checkIsContractDeployed(new Address(tokenRootAddress), 'TokenRootUpgradeable')
-    const TokenRoot = locklift.factory.getDeployedContract('TokenRootUpgradeable', new Address(tokenRootAddress));
+  await checkIsContractDeployed(new Address(tokenRootAddress), 'TokenRootUpgradeable')
+  const TokenRoot = locklift.factory.getDeployedContract('TokenRootUpgradeable', new Address(tokenRootAddress));
 
-    // Our internal message which one we will send from our msig2
-    const mintTokensPayload = await TokenRoot.methods.mint({
-        amount: 10_000_000_000, //10 tokens * 9 decimals
-        recipient: mintTo,
-        deployWalletValue: locklift.utils.toNano(0.1), // 0.1 ever
-        remainingGasTo: ownerMsig.address,
-        notify: false,
-        payload: "",
-    }).encodeInternal();
-
-    // Call the method from msig
-    const tracing = await locklift.tracing.trace(ownerMsig.methods
-        .sendTransaction({
-            dest: TokenRoot.address,
-            value: locklift.utils.toNano(1), // 1 ever
-            bounce: true,
-            flags: 0,
-            payload: mintTokensPayload,
-        })
-        .sendExternal({
-            publicKey: signer.publicKey,
-        }));
+  // Call the method from our wallet
+  const tracing = await locklift.tracing.trace(TokenRoot.methods.mint({
+    amount: 10_000_000_000, //10 tokens * 9 decimals
+    recipient: mintTo,
+    deployWalletValue: locklift.utils.toNano(0.1), // 0.1 ever
+    remainingGasTo: diceOwnerWallet.address,
+    notify: false,
+    payload: "",
+  }).send({
+    from: diceOwnerWallet.address,
+    amount: locklift.utils.toNano(1)
+  }));
 
 
-    const tokenWalletAddress = (await TokenRoot.methods.walletOf({answerId: 0, walletOwner: mintTo}).call()).value0;
-    const TokenWallet = locklift.factory.getDeployedContract('TokenWalletUpgradeable', tokenWalletAddress);
+  const tokenWalletAddress = (await TokenRoot.methods.walletOf({answerId: 0, walletOwner: mintTo}).call()).value0;
+  const TokenWallet = locklift.factory.getDeployedContract('TokenWalletUpgradeable', tokenWalletAddress);
 
-    const {value0: tokenWalletBalance} = await TokenWallet.methods.balance({ answerId: 0 }).call();
-    const { value0: totalSupply } = await TokenRoot.methods.totalSupply({ answerId: 0 }).call();
+  const {value0: tokenWalletBalance} = await TokenWallet.methods.balance({ answerId: 0 }).call();
+  const { value0: totalSupply } = await TokenRoot.methods.totalSupply({ answerId: 0 }).call();
 
-    console.log(`Tokens minted to ${mintTo.toString()}, wallet balance is ${tokenWalletBalance}, total supply is ${totalSupply}`);
+  console.log(`Tokens minted to ${mintTo.toString()}, wallet balance is ${tokenWalletBalance}, total supply is ${totalSupply}`);
 }
 
 main()
-    .then(() => process.exit(0))
-    .catch(e => {
-        console.log(e);
-        process.exit(1);
-    });
+  .then(() => process.exit(0))
+  .catch(e => {
+    console.log(e);
+    process.exit(1);
+  });

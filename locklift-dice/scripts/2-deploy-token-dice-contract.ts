@@ -1,67 +1,55 @@
 import {Address} from "locklift";
-import {checkIsContractDeployed, GetMsig2ForSigner} from "./utils";
+import {checkAccountBalanceIsAbove, checkIsContractDeployed} from "./utils";
+import {EverWalletAccount} from "everscale-standalone-client/nodejs";
+import BigNumber from "bignumber.js";
 
 async function main() {
     const signer = (await locklift.keystore.getSigner("0"))!;
+    const diceOwnerWallet = await EverWalletAccount.fromPubkey({publicKey: signer.publicKey, workchain: 0});
 
-    // Get Msig for Owner, must be already deployed,
-    const ownerMsig = await GetMsig2ForSigner(signer, false, '0');
+    await checkAccountBalanceIsAbove(diceOwnerWallet.address, new BigNumber(locklift.utils.toNano(4)));
 
     // Put there address of the token root the previous script.
-    const tokenRootAddress = '0:ee0eafb66766d3fa04fd3746d5802acf8de6c427a6222ae328a95915aef98517';
+    const tokenRootAddress = '0:cb5f57378e82174ed95502b01df16235d8d94e974ce24a4dc8a10143f23c0c44';
     await checkIsContractDeployed(new Address(tokenRootAddress), 'TokenRoot')
 
-    // We will deploy TokenDice.sol by the internal message from our msig2.
+    // We will deploy TokenDice.sol by the internal message from our EverWallet
     const TokenDice = locklift.factory.getContractArtifacts("TokenDice");
 
     // Calculate the state init for tvc and initial params.
     // StateInit - code + static variables, to deploy the contract
     // Also this function return address of the future contract
     // Because address it is a hash(stateInit)
-    const {address: diceContractAddress, stateInit: stateInit} = await locklift.provider.getStateInit(TokenDice.abi, {
+    const {address: diceContractAddress, stateInit: tokenDiceStateInit} = await locklift.provider.getStateInit(TokenDice.abi, {
         workchain: 0,
         tvc: TokenDice.tvc,
         initParams: {
             tokenRoot_: new Address(tokenRootAddress),
-            owner_: ownerMsig.address
+            owner_: diceOwnerWallet.address
         }
     })
 
 
-    // Encode constructor function call
-    const payload = await (new locklift.provider.Contract(TokenDice.abi, diceContractAddress)).methods
-        .constructor({}).encodeInternal();
+    // We need to add our EverWallet as account to provider
+    // to use .send({from: 'address'})
+    await locklift.factory.accounts.storage.addAccount(diceOwnerWallet);
 
-    // Check is tokenDice contract already deployed
-    const tokenDiceAccountState = (await locklift.provider.getFullContractState({
-        address: diceContractAddress
-    })).state;
+    // Contract instance
+    const tokenDice = new locklift.provider.Contract(TokenDice.abi, diceContractAddress);
 
-    if (tokenDiceAccountState !== undefined && tokenDiceAccountState.isDeployed) {
-        throw new Error(`TokenDice contract already deployed at ${diceContractAddress.toString()}`);
-    }
+    console.log('Try deploy at', tokenDice.address.toString());
 
-    // Call submitTransaction method of msig2
-    // by external message with arguments
-    // Tracing is just parsing all messages in transaction tree
-    // and throwing error if any of children transactions fails.
-    // You can specify valid error codes for every tracing,
-    // just follow locklift documentation
-    const tracing = await locklift.tracing.trace(ownerMsig.methods
-        .submitTransaction({
-            dest: diceContractAddress,
-            value: locklift.utils.toNano(3), // 3 evers
-            bounce: true,
-            allBalance: false,
-            payload: payload,
-            stateInit: stateInit
+    // Tracing - it is method like we used in previous samples,
+    // but it is more complicated and can be used only with graphql
+    // endpoint. Please read locklift documentation to study
+    // about tracing feature.
+    const tracing = await locklift.tracing.trace(
+        tokenDice.methods.constructor({}).send({
+            from: diceOwnerWallet.address,
+            amount: locklift.utils.toNano(3),
+            stateInit: tokenDiceStateInit
         })
-        .sendExternal({
-            // We specify pubkey
-            // Locklift will look into keystore to try to find secret key
-            // for this pubkey
-            publicKey: signer.publicKey,
-        }));
+    )
 
     await checkIsContractDeployed(diceContractAddress, 'TokenDice')
     console.log(`Token dice deployed at: ${diceContractAddress.toString()}`);

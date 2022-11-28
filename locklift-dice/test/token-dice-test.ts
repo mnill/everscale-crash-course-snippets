@@ -1,11 +1,11 @@
 import { expect } from "chai";
 import {Address, Contract, Signer, zeroAddress} from "locklift";
 import { FactorySource } from "../build/factorySource";
-import {checkIsContractDeployed, GetMsig2ForSigner} from "../scripts/utils";
 import BigNumber from "bignumber.js";
+import {EverWalletAccount} from "everscale-standalone-client/nodejs";
 
 let signer: Signer;
-let OwnerMsig: Contract<FactorySource["SetcodeMultisig"]>;
+let TokenOwner: EverWalletAccount;
 let TokenDice: Contract<FactorySource["TokenDice"]>;
 let TokenRoot: Contract<FactorySource["TokenRootUpgradeable"]>;
 let OwnerTokenWallet: Contract<FactorySource["TokenWalletUpgradeable"]>;
@@ -13,13 +13,9 @@ let OwnerTokenWallet: Contract<FactorySource["TokenWalletUpgradeable"]>;
 describe("Test Dice contract", async function () {
   before(async () => {
     signer = (await locklift.keystore.getSigner("0"))!;
-
-    // Deploy and refill msig2 owner
-    OwnerMsig = await GetMsig2ForSigner(signer, true, locklift.utils.toNano(10));
-    const msigBalance = (await OwnerMsig.getFullState()).state!.balance;
-    if (new BigNumber(msigBalance).lt(locklift.utils.toNano(10))) {
-      await locklift.giver.sendTo(OwnerMsig.address, locklift.utils.toNano(10));
-    }
+    TokenOwner = await EverWalletAccount.fromPubkey({publicKey: signer.publicKey, workchain: 0});
+    await locklift.giver.sendTo(TokenOwner.address, locklift.utils.toNano(10));
+    locklift.factory.accounts.storage.addAccount(TokenOwner);
 
     const TokenWalletUpgradable = locklift.factory.getContractArtifacts("TokenWalletUpgradeable");
     const TokenRootUpgradeable = locklift.factory.getContractArtifacts("TokenRootUpgradeable");
@@ -31,7 +27,7 @@ describe("Test Dice contract", async function () {
       publicKey: signer.publicKey,
       initParams: {
         randomNonce_: locklift.utils.getRandomNonce(),
-        rootOwner_: OwnerMsig.address,
+        rootOwner_: TokenOwner.address,
         name_: 'Test',
         symbol_: 'Test',
         deployer_: zeroAddress,
@@ -46,7 +42,7 @@ describe("Test Dice contract", async function () {
         mintDisabled: false,
         burnByRootDisabled: false,
         burnPaused: false,
-        remainingGasTo: OwnerMsig.address,
+        remainingGasTo: TokenOwner.address,
       },
       // How many tokens send from the giver to the contract
       // before deploy it by an external message
@@ -69,71 +65,44 @@ describe("Test Dice contract", async function () {
       const tokenDiceData = await locklift.factory.getContractArtifacts("TokenDice");
 
       // Encode stateInit of tokenDice contract
-      const {address: diceContractAddress, stateInit: stateInit} = await locklift.provider.getStateInit(tokenDiceData.abi, {
+      const {address: diceContractAddress, stateInit: tokenDiceStateInit} = await locklift.provider.getStateInit(tokenDiceData.abi, {
         tvc: tokenDiceData.tvc,
         workchain: 0,
         initParams: {
           tokenRoot_: TokenRoot.address,
-          owner_: OwnerMsig.address
+          owner_: TokenOwner.address
         }
       })
 
-      // Encode constructor function call
-      const payload = await (new locklift.provider.Contract(tokenDiceData.abi, diceContractAddress)).methods
-          .constructor({}).encodeInternal();
+      TokenDice = new locklift.provider.Contract(tokenDiceData.abi, diceContractAddress)
 
-      // Call submitTransaction method of msig2
-      // by external message with arguments
-      // Tracing is just parsing all messages in transaction tree
-      // and throwing error if any of children transactions fails.
-      // You can specify valid error codes for every tracing,
-      // just follow locklift documentation
+      const tracing = await locklift.tracing.trace(
+        TokenDice.methods.constructor({}).send({
+          from: TokenOwner.address,
+          amount: locklift.utils.toNano(3),
+          stateInit: tokenDiceStateInit
+        })
+      )
 
-      const tracing = await locklift.tracing.trace(OwnerMsig.methods
-          .submitTransaction({
-            dest: diceContractAddress,
-            value: locklift.utils.toNano(3), // 3 evers
-            bounce: true,
-            allBalance: false,
-            payload: payload,
-            stateInit: stateInit
-          })
-          .sendExternal({
-            // We specify pubkey
-            // Locklift will look into keystore to try to find secret key
-            // for this pubkey and send an external message
-            publicKey: signer.publicKey,
-          }));
-
-      TokenDice = locklift.factory.getDeployedContract('TokenDice', diceContractAddress);
       expect(await locklift.provider.getBalance(TokenDice.address).then(balance => Number(balance))).to.be.above(0);
     });
 
     it("Mint tokens to owner's msig", async function () {
       const amount_to_mint = new BigNumber(100_000_000_000); //100 tokens * 9 decimals
 
-      const mintTokensToOwner = await TokenRoot.methods.mint({
+      await locklift.tracing.trace(TokenRoot.methods.mint({
         amount: amount_to_mint.toFixed(),
-        recipient: OwnerMsig.address,
+        recipient: TokenOwner.address,
         deployWalletValue: locklift.utils.toNano(0.1), // 0.1 ever
-        remainingGasTo: OwnerMsig.address,
+        remainingGasTo: TokenOwner.address,
         notify: false,
         payload: "",
-      }).encodeInternal();
+      }).send({
+        from: TokenOwner.address,
+        amount: locklift.utils.toNano(1)
+      }))
 
-      const tracing = await locklift.tracing.trace(OwnerMsig.methods
-          .sendTransaction({
-            dest: TokenRoot.address,
-            value: locklift.utils.toNano(1), // 1 ever
-            bounce: true,
-            flags: 0,
-            payload: mintTokensToOwner,
-          })
-          .sendExternal({
-            publicKey: signer.publicKey,
-          }));
-
-      const ownerTokenWalletAddress = (await TokenRoot.methods.walletOf({answerId: 0, walletOwner: OwnerMsig.address}).call()).value0;
+      const ownerTokenWalletAddress = (await TokenRoot.methods.walletOf({answerId: 0, walletOwner: TokenOwner.address}).call()).value0;
       OwnerTokenWallet = locklift.factory.getDeployedContract('TokenWalletUpgradeable', ownerTokenWalletAddress);
 
       const { value0: tokenWalletBalance} = await OwnerTokenWallet.methods.balance({answerId: 0}).call();
@@ -146,29 +115,17 @@ describe("Test Dice contract", async function () {
     it("Mint tokens to TokenDice contract", async function () {
       const amount_to_mint = new BigNumber(10_000_000_000); //10 tokens * 9 decimals
 
-      const mintTokensToOwner = await TokenRoot.methods.mint({
+      await locklift.tracing.trace(TokenRoot.methods.mint({
         amount: amount_to_mint.toFixed(),
         recipient: TokenDice.address,
         deployWalletValue: locklift.utils.toNano(0.1), // 0.1 ever
-        remainingGasTo: OwnerMsig.address,
-        // WE Should notify TokenDice about new tokens
-        // Because it should increase their local balance
-        // To calculate max available bet amount
+        remainingGasTo: TokenOwner.address,
         notify: true,
         payload: "",
-      }).encodeInternal();
-
-      const tracing = await locklift.tracing.trace(OwnerMsig.methods
-        .sendTransaction({
-          dest: TokenRoot.address,
-          value: locklift.utils.toNano(1), // 1 ever
-          bounce: true,
-          flags: 0,
-          payload: mintTokensToOwner,
-        })
-        .sendExternal({
-          publicKey: signer.publicKey,
-        }));
+      }).send({
+        from: TokenOwner.address,
+        amount: locklift.utils.toNano(1)
+      }))
 
       const tokenDiceBalance = await TokenDice.methods.balance_({}).call();
       const tokenDiceMaxBet = await TokenDice.methods.maxBet({}).call();
@@ -190,29 +147,20 @@ describe("Test Dice contract", async function () {
         ] as const,
       })).boc;
 
-      const transferTokensPayload = await OwnerTokenWallet.methods.transfer({
+      await locklift.tracing.trace(OwnerTokenWallet.methods.transfer({
         amount: new BigNumber(tokenDiceMaxBet).plus(1).toFixed(),
         recipient: TokenDice.address,
         // We will not deploy target wallet because we sure wallet is exists
         // If there is no wallet at the destination
         // tokens will return
         deployWalletValue: 0,
-        remainingGasTo: OwnerMsig.address,
+        remainingGasTo: TokenOwner.address,
         notify: true,
         payload: betPayload
-      }).encodeInternal();
-
-      const tracing = await locklift.tracing.trace(OwnerMsig.methods
-          .sendTransaction({
-            dest: OwnerTokenWallet.address,
-            value: locklift.utils.toNano(1), // 1 ever
-            bounce: true,
-            flags: 0,
-            payload: transferTokensPayload,
-          })
-          .sendExternal({
-            publicKey: signer.publicKey,
-          }));
+      }).send({
+        from: TokenOwner.address,
+        amount: locklift.utils.toNano(1)
+      }));
 
       let {value0: ownerTokenWalletBalanceAfterPlay} = await OwnerTokenWallet.methods.balance({answerId: 0}).call();
       expect(ownerTokenWalletBalanceBeforePlay).to.be.equal(ownerTokenWalletBalanceAfterPlay, "Wrong tokens amount");
@@ -231,26 +179,17 @@ describe("Test Dice contract", async function () {
           ] as const,
         })).boc;
 
-        const transferTokensPayload = await OwnerTokenWallet.methods.transfer({
+        const tracing = await locklift.tracing.trace(OwnerTokenWallet.methods.transfer({
           amount: new BigNumber(1).shiftedBy(9).toFixed(), // 1 * 10^9(decimals) = 1 token
           recipient: TokenDice.address,
           deployWalletValue: 0,
-          remainingGasTo: OwnerMsig.address,
+          remainingGasTo: TokenOwner.address,
           notify: true,
           payload: betPayload
-        }).encodeInternal();
-
-        const tracing = await locklift.tracing.trace(OwnerMsig.methods
-            .sendTransaction({
-              dest: OwnerTokenWallet.address,
-              value: locklift.utils.toNano(1),
-              bounce: true,
-              flags: 0,
-              payload: transferTokensPayload,
-            })
-            .sendExternal({
-              publicKey: signer.publicKey,
-            }));
+        }).send({
+          from: TokenOwner.address,
+          amount: locklift.utils.toNano(1)
+        }));
 
         let {value0: ownerTokenWalletBalanceAfterPlay} = await OwnerTokenWallet.methods.balance({answerId: 0}).call();
 
