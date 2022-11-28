@@ -138,7 +138,7 @@ async function main() {
   //     uint8 flags,
   //     TvmCell payload,
   //     optional(TvmCell) stateInit
-  // ) {
+  // ) external {
   //       require(msg.pubkey() == tvm.pubkey(), 100);
   //       dest.transfer({
   //         value: value,

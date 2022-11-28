@@ -2,10 +2,9 @@
   "name": "simple-tip3-token",
   "version": "1.0.0",
   "dependencies": {
-    "@eversdk/appkit": "^0.3.1",
-    "@eversdk/core": "^1.37.2",
-    "@eversdk/lib-node": "^1.37.2",
-    "bignumber.js": "^9.1.0"
+    "bignumber.js": "^9.1.0",
+    "everscale-inpage-provider": "^0.3.45",
+    "everscale-standalone-client": "^2.1.5"
   },
   "scripts": {
     "build": "everdev sol compile -o ./artifacts contracts/TokenDice.sol && everdev sol compile -o ./artifacts contracts/TokenRoot.sol && everdev sol compile -o ./artifacts contracts/TokenWallet.sol",

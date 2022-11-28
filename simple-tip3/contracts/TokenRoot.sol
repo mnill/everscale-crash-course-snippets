@@ -229,6 +229,11 @@ contract TokenRoot is ITokenRoot {
     return { value: 0, flag: TokenMsgFlag.REMAINING_GAS, bounce: false } _getExpectedWalletAddress(walletOwner);
   }
 
+  function totalSupply() override external view responsible returns (uint128) {
+    // Responsible function to get current total supply.
+    return { value: 0, flag: TokenMsgFlag.REMAINING_GAS, bounce: false } totalSupply_;
+  }
+
   onBounce(TvmSlice slice) external {
     // This is a utility function for handling errors. In the mint function we did not check
     // if the contract was deployed at the destination address.

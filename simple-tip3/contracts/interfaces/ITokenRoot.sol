@@ -18,4 +18,5 @@ interface ITokenRoot {
 
     function rootOwner() external view responsible returns (address);
     function walletOf(address owner) external view responsible returns (address);
+    function totalSupply() external view responsible returns (uint128);
 }

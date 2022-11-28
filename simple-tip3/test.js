@@ -1,12 +1,9 @@
-const { Account } = require("@eversdk/appkit");
-const { TonClient, signerKeys, signerNone,
-    builderOpInteger,
-    builderOpBitString,
-} = require("@eversdk/core");
-const { libNode } = require("@eversdk/lib-node");
 const BigNumber = require('bignumber.js');
 
-TonClient.useBinaryLibrary(libNode);
+const { Address, ProviderRpcClient } = require('everscale-inpage-provider');
+const { EverscaleStandaloneClient, EverWalletAccount, SimpleAccountsStorage } = require('everscale-standalone-client/nodejs');
+const { SimpleKeystore } = require("everscale-standalone-client/client/keystore");
+const { getGiverKeypair, getTokensFromGiver } = require("./giver");
 
 const { TokenRootContract } = require("./artifacts/TokenRootContract.js")
 const { TokenWalletContract } = require("./artifacts/TokenWalletContract.js")
@@ -14,456 +11,385 @@ const { TokenDiceContract } = require("./artifacts/TokenDiceContract.js")
 const { SetcodeMultisigContract } = require("./artifacts/SetcodeMultisigContract");
 
 
-async function main(client) {
-    try {
-        let response;
-        // prepare
-        const rootOwnerKeys = await TonClient.default.crypto.generate_random_sign_keys();
-        const user1Keys = await TonClient.default.crypto.generate_random_sign_keys();
-        const user2Keys = await TonClient.default.crypto.generate_random_sign_keys();
+const keyStore = new SimpleKeystore();
+const accountStorage = new SimpleAccountsStorage();
 
-        const rootOwnerMsig = await deployMultisigForPubkey(client, rootOwnerKeys);
-        const user1Msig = await deployMultisigForPubkey(client, user1Keys);
-        const user2Msig = await deployMultisigForPubkey(client, user2Keys);
+const ever = new ProviderRpcClient({
+  fallback: () =>
+    EverscaleStandaloneClient.create({
+      connection: {
+        id: 1, // connection id
+        type: 'graphql',
+        group: "localnet",
+        data: {
+          endpoints: ['127.0.0.1'],
+          latencyDetectionInterval: 1000,
+          local: true,
+        },
+      },
+      keystore: keyStore,
+      accountsStorage: accountStorage
+    }),
+});
 
-        const rootOwnerAddress = await rootOwnerMsig.getAddress();
-        const user1Address = await user1Msig.getAddress();
-        const user2Address = await user2Msig.getAddress();
+async function main() {
 
+  // giver key pairs
+  keyStore.addKeyPair(getGiverKeypair());
 
-        const rootContract = new Account(TokenRootContract, {
-            signer: signerNone(), // pubkey is not set
-            client,
-            initData: {
-                name_: 'Test token',
-                symbol_: 'TST',
-                decimals_: 9,
-                rootOwner_: await rootOwnerMsig.getAddress(),
-                walletCode_: TokenWalletContract.code,
-            }
-        });
+  // generate keys for test wallets
+  const rootOwnerKeys = SimpleKeystore.generateKeyPair();
+  const user1Keys = SimpleKeystore.generateKeyPair();
+  const user2Keys = SimpleKeystore.generateKeyPair();
 
-        // Deploy token root
-        let rootInitData = (await client.abi.encode_initial_data({
-            abi: rootContract.abi,
-            initial_data: {
-                name_: 'Test token',
-                symbol_: 'TST',
-                decimals_: 9,
-                rootOwner_: await rootOwnerMsig.getAddress(),
-                walletCode_: TokenWalletContract.code,
-            },
-            initial_pubkey: `0x0000000000000000000000000000000000000000000000000000000000000000` // if zero pubkey must be such string
-        })).data
+  // add keys to the keystore
+  keyStore.addKeyPair(rootOwnerKeys);
+  keyStore.addKeyPair(user1Keys);
+  keyStore.addKeyPair(user2Keys);
 
-        // We take code + initial data and make StateInit.
-        // We will send stateInit along with the message to call the constructor.
-        // Validator will check is hash(stateInit) === address and will Initialize our contract
-        // (will add code + initial data to account )
-        const rootStateInit = (await client.boc.encode_tvc({
-            code: TokenRootContract.code,
-            data: rootInitData
-        })).tvc;
+  // derive wallet contract from the pubkey
+  const rootOwnerWallet = await EverWalletAccount.fromPubkey({publicKey: rootOwnerKeys.publicKey, workchain: 0});
+  const user1Wallet = await EverWalletAccount.fromPubkey({publicKey: user1Keys.publicKey, workchain: 0});
+  const user2Wallet = await EverWalletAccount.fromPubkey({publicKey: user2Keys.publicKey, workchain: 0});
 
-        // Secondly we encode a message witch one will call the constructor in the same transaction
-        // Technically contract can be deployed without calling a constructor or any other function and the account will have
-        // status - active. Solidity has a special hidden variable "_constructorFlag" and always check it before any call.
-        // So your contract can not be called before the constructor will be called successfully.
+  // send 10 ever to the wallets
+  await getTokensFromGiver(ever, rootOwnerWallet.address, everToNanoEver(10));
+  await getTokensFromGiver(ever, user1Wallet.address, everToNanoEver(10));
+  await getTokensFromGiver(ever, user2Wallet.address, everToNanoEver(10));
 
-        // We encode a message with params is_internal: true/signer: signerNone because this is an internal message
-        // we would like to send. Then we will put the encoded internal message as an argument "payload" into the external
-        // message we will send to our multisig
-        const rootDeployMessage = (await client.abi.encode_message_body({
-            abi: rootContract.abi,
-            call_set: {
-                function_name: "constructor",
-                input: {
-                    remainingGasTo: rootOwnerAddress
-                },
-            },
-            is_internal: true,
-            signer: signerNone(),
-        })).body
-
-        const rootAddress = await rootContract.getAddress();
-
-        await rootOwnerMsig.run('submitTransaction', {
-            dest: rootAddress,
-            value: 2_000_000_000, // 9 evers
-            bounce: false,
-            allBalance: false,
-            payload: rootDeployMessage,
-            stateInit: rootStateInit
-        })
-        console.log(`root contract deployed at address: ${rootAddress}`);
+  // add wallets to the accountStorage to use .send({from: address})
+  accountStorage.addAccount(rootOwnerWallet);
+  accountStorage.addAccount(user1Wallet);
+  accountStorage.addAccount(user2Wallet);
 
 
-        // Deploy wallets for user1 and user2
-        for (let userAddress of [user1Address, user2Address]) {
-            await rootOwnerMsig.run('submitTransaction', {
-                dest: rootAddress,
-                value: 1_000_000_000, // We attach 1 ever to the internal message, the change must be returned to our account
-                bounce: false,
-                allBalance: false,
-                payload: (await client.abi.encode_message_body({
-                    abi: rootContract.abi,
-                    call_set: {
-                        function_name: "deployWallet",
-                        input: {
-                            answerId: 0,
-                            walletOwner: userAddress,
-                            deployWalletValue: 100_000_000 //0.1 ever
-                        },
-                    },
-                    is_internal: true,
-                    signer: signerNone(),
-                })).body
-            });
-        }
-
-        const user1WalletContract = new Account(TokenWalletContract, {
-            signer: signerNone(), // pubkey is not set
-            client,
-            initData: {
-                root_: rootAddress,
-                owner_: user1Address
-            }
-        });
-
-        // Get address of user1 token wallet contract
-        const user1TokenWalletAddress = (await rootContract.runLocal('walletOf', {
-            answerId: 0, // because function marked as responsible
-            walletOwner: user1Address
-        })).decoded.output.value0;
-
-        // Get address of user2 token wallet contract
-        const user2TokenWalletAddress = (await rootContract.runLocal('walletOf', {
-            answerId: 0, // because function marked as responsible
-            walletOwner: user2Address
-        })).decoded.output.value0;
-
-
-        // Create instances for tokenWallet contract by specify the adress of already deployed contract
-        const user1TokenWalletContract = new Account(TokenWalletContract, {
-            signer: signerNone(),
-            client,
-            address: user1TokenWalletAddress
-        });
-
-        // We also can create an instance by specify initial data. Address will be the same
-        const user2TokenWalletContract = new Account(TokenWalletContract, {
-            signer: signerNone(),
-            client,
-            initData: {
-                root_: rootAddress,
-                owner_: user2Address
-            }
-        });
-
-        // Mint tokens for user1 and user2
-        for (let userAddress of [user1Address, user2Address]) {
-            await rootOwnerMsig.run('submitTransaction', {
-                dest: rootAddress,
-                value: 1_000_000_000, // We attach 1 ever to the internal message, the change must be returned to our account
-                bounce: false,
-                allBalance: false,
-                payload: (await client.abi.encode_message_body({
-                    abi: rootContract.abi,
-                    call_set: {
-                        function_name: "mint",
-                        input: {
-                            amount: 100_000_000_000, // 100 * 10 ^ 9
-                            recipient: userAddress,
-                            deployWalletValue: 100_000_000, // 0.1 ever
-                            remainingGasTo: rootOwnerAddress,
-                            notify: false,
-                            payload: ''
-                        },
-                    },
-                    is_internal: true,
-                    signer: signerNone(),
-                })).body
-            });
-        }
-
-        // TokenWallet balance must be 100 tokens
-        assert('100000000000' === (await user1TokenWalletContract.runLocal('balance', {answerId:0})).decoded.output.value0, 'User1 balance must be 100 tokens');
-        assert('100000000000' === (await user2TokenWalletContract.runLocal('balance', {answerId:0})).decoded.output.value0, 'User2 balance must be 100 tokens');
-
-        // Transfer 50 tokens from user1 to user2
-        await user1Msig.run('submitTransaction', {
-            dest: user1TokenWalletAddress,
-            value: 1_000_000_000, // We attach 1 ever to the internal message, the change must be returned to our account
-            bounce: false,
-            allBalance: false,
-            payload: (await client.abi.encode_message_body({
-                abi: user1TokenWalletContract.abi,
-                call_set: {
-                    function_name: "transfer",
-                    input: {
-                        amount: 50_000_000_000, // 50 * 10 ^ 9
-                        recipient: user2Address,
-                        deployWalletValue: 100_000_000, // 0.1 ever
-                        remainingGasTo: user1Address,
-                        notify: false,
-                        payload: ''
-                    },
-                },
-                is_internal: true,
-                signer: signerNone(),
-            })).body
-        });
-
-        assert('50000000000' === (await user1TokenWalletContract.runLocal('balance', {answerId:0})).decoded.output.value0, 'User1 balance must be 50 tokens');
-        assert('150000000000' === (await user2TokenWalletContract.runLocal('balance', {answerId:0})).decoded.output.value0, 'User2 balance must be 150 tokens');
-
-
-        // Try to send 1000 tokens from user1 wallet, balances must stay the same
-        // Because we have not such amount of tokens on our wallet
-        await user1Msig.run('submitTransaction', {
-            dest: user1TokenWalletAddress,
-            value: 1_000_000_000, // We attach 1 ever to the internal message, the change must be returned to our account
-            bounce: false,
-            allBalance: false,
-            payload: (await client.abi.encode_message_body({
-                abi: user1TokenWalletContract.abi,
-                call_set: {
-                    function_name: "transfer",
-                    input: {
-                        amount: 1000_000_000_000, // 1000 * 10 ^ 9
-                        recipient: user2Address,
-                        deployWalletValue: 100_000_000, // 0.1 ever
-                        remainingGasTo: user1Address,
-                        notify: false,
-                        payload: ''
-                    },
-                },
-                is_internal: true,
-                signer: signerNone(),
-            })).body
-        });
-
-        assert('50000000000' === (await user1TokenWalletContract.runLocal('balance', {answerId:0})).decoded.output.value0, 'User1 balance must be 50 tokens');
-        assert('150000000000' === (await user2TokenWalletContract.runLocal('balance', {answerId:0})).decoded.output.value0, 'User2 balance must be 150 tokens');
-
-        // Okay, just deploy the TokenDice contract from user1 msig.
-        const diceContract = new Account(TokenDiceContract,{
-            signer: signerNone(),
-            client,
-            initData: {
-                tokenRoot_: rootAddress,
-                owner_: user1Address
-            },
-        });
-
-        // To deploy the contract from another contract we need to calculate initial data (static variables + pubkey)
-        let diceContractInitData = (await client.abi.encode_initial_data({
-            abi: diceContract.abi,
-            initial_data: {
-                tokenRoot_: rootAddress,
-                owner_: user1Address
-            },
-            initial_pubkey: `0x0000000000000000000000000000000000000000000000000000000000000000` // if zero pubkey must be such string
-        })).data
-
-        // We take code + initial data and make StateInit.
-        // We will send stateInit along with the message to call the constructor.
-        // Validator will check is hash(stateInit) === address and will Initialize our contract
-        // (will add code + initial data to account )
-        const diceContractStateInit = (await client.boc.encode_tvc({
-            code: TokenDiceContract.code,
-            data: diceContractInitData
-        })).tvc;
-
-        // Secondly we encode a message witch one will call the constructor in the same transaction
-        // Technically contract can be deployed without calling a constructor or any other function and the account will have
-        // status - active. Solidity has a special hidden variable "_constructorFlag" and always check it before any call.
-        // So your contract can not be called before the constructor will be called successfully.
-
-        // We encode a message with params is_internal: true/signer: signerNone because this is an internal message
-        // we would like to send. Then we will put the encoded internal message as an argument "payload" into the external
-        // message we will send to our multisig
-
-        const diceDeployMessage = (await client.abi.encode_message_body({
-            abi: diceContract.abi,
-            call_set: {
-                function_name: "constructor",
-                input: {},
-            },
-            is_internal: true,
-            signer: signerNone(),
-        })).body
-
-        const diceContractAddress = await diceContract.getAddress();
-
-        // We call submitTransaction method of multisig and pass diceDeployMessage and diceContractStateInit to deploy
-        // our dice contract.
-        // There we are creating an external message with arguments and sending it to the contract. For signing the message
-        // by default will be used "signer" which one we specified when created and "casinoOwnerMultisig" instance - casino_owner_keys
-        await user1Msig.run('submitTransaction', {
-            dest: diceContractAddress,
-            value: 3_000_000_000, // 3 evers
-            bounce: true,
-            allBalance: false,
-            payload: diceDeployMessage,
-            stateInit: diceContractStateInit
-        })
-
-        console.log('Dice contract deployed at', diceContractAddress, ', max bet is',  (await diceContract.runLocal('maxBet', {}, {})).decoded.output.value0);
-
-        // Transfer tokens to dice contract
-        await user1Msig.run('submitTransaction', {
-            dest: user1TokenWalletAddress,
-            value: 1_000_000_000, // We attach 1 ever to the internal message, the change must be returned to our account
-            bounce: false,
-            allBalance: false,
-            payload: (await client.abi.encode_message_body({
-                abi: user1TokenWalletContract.abi,
-                call_set: {
-                    function_name: "transfer",
-                    input: {
-                        amount: 50_000_000_000, // 50 * 10 ^ 9
-                        recipient: diceContractAddress,
-                        deployWalletValue: 100_000_000, // 0.1 ever
-                        remainingGasTo: user1Address,
-                        notify: true,
-                        payload: ''
-                    },
-                },
-                is_internal: true,
-                signer: signerNone(),
-            })).body
-        });
-
-        // Encode payload TVMCell to pass data with token transfers
-        const encodedDiceBetValue = (await client.abi.encode_boc({
-            params: [
-                { name: "_bet_dice_value", type: "uint8" },
-            ],
-            data: {
-                "_bet_dice_value": "5",
-            }
-        })).boc;
-
-        const playMessage = (await client.abi.encode_message_body({
-            abi: user2TokenWalletContract.abi,
-            call_set: {
-                function_name: "transfer",
-                input: {
-                    amount: 1_000_000_000, // 1 * 10 ^ 9 - 1 token
-                    recipient: diceContractAddress,
-                    deployWalletValue: 0, // 0 ever because we known wallet is already deployed
-                    remainingGasTo: user2Address,
-                    notify: true,
-                    payload: encodedDiceBetValue
-                },
-            },
-            is_internal: true,
-            signer: signerNone(),
-        })).body
-
-
-        // try to play
-        for (let i = 0; i < 1000; i++) {
-            let maxBet = new BigNumber((await diceContract.runLocal('maxBet', {}, {})).decoded.output.value0);
-            let ourBalance = new BigNumber((await user2TokenWalletContract.runLocal('balance', {answerId: 0}, {})).decoded.output.value0);
-
-            const oneToken = new BigNumber(1_000_000_000);
-
-            if (maxBet.lt(oneToken)) {
-                console.log('Dice contract has not enough balance to play');
-                break;
-            }
-            if (ourBalance.lt(oneToken)) {
-                console.log('We have not enough tokens to play');
-                break;
-            }
-
-            console.log('\nTry to roll a dice...', i);
-
-            let result = await user2Msig.run('sendTransaction', {
-                dest: user2TokenWalletAddress,
-                value: 1_500_000_000, // 1.5 evers
-                bounce: true, // Send funds back on any error in desctination account
-                flags: 1, // Pay delivery fee from the multisig balance, not from the value.
-                payload: playMessage
-            });
-
-            // Load list of all transactions and messages
-            let transaction_tree = await client.net.query_transaction_tree({
-                in_msg: result.transaction.in_msg,
-                abi_registry: [user2Msig.abi, user2TokenWalletContract.abi, diceContract.abi]});
-
-            // Look for game event log
-            let gameLogMessage = transaction_tree.messages.find(m => m.src === diceContractAddress && m.decoded_body && m.decoded_body.name === 'Game');
-            if (!gameLogMessage) {
-                throw new Error('Game not found');
-            }
-
-            if (gameLogMessage.decoded_body.value.prize !== '0') {
-                console.log('We won', (parseInt(gameLogMessage.decoded_body.value.prize)/1_000_000_000).toFixed(2), 'tokens');
-                let ourNewBalance = new BigNumber((await user2TokenWalletContract.runLocal('balance', {answerId: 0}, {})).decoded.output.value0);
-                assert(ourNewBalance.eq(ourBalance.plus(new BigNumber(gameLogMessage.decoded_body.value.prize).minus(1_000_000_000))));
-                break;
-            } else {
-                console.log('Lose!')
-            }
-            // await sleep(1);
-        }
-
-
-        // console.log('Tokens transferred', ', max bet is',  (await diceContract.runLocal('maxBet', {}, {})).decoded.output.value0);
-        console.log('Tests successful');
-    } catch (e) {
-        console.error(e);
+  // Calculate state init for token root
+  const {
+    address: tokenRootAddress,
+    stateInit: tokenRootStateInit
+  } = await ever.getStateInit(TokenRootContract.abi, {
+    tvc: TokenRootContract.tvc,
+    workchain: 0,
+    initParams: {
+      name_: 'Test token',
+      symbol_: 'TST',
+      decimals_: 9,
+      rootOwner_: rootOwnerWallet.address,
+      walletCode_: TokenWalletContract.code,
     }
-}
+  });
 
-async function deployMultisigForPubkey(client, keypair) {
-    let multisig = new Account(SetcodeMultisigContract, {
-        signer: signerKeys(keypair),
-        client,
-        initData: {},
+  // Create tokenRoot contract by abi & address
+  const tokenRoot = new ever.Contract(TokenRootContract.abi, tokenRootAddress);
+
+  // Deploy token root by internal message from the rootOwnerWallet address
+  const deployTokenRootTX = await extractError(tokenRoot.methods
+    .constructor({
+      remainingGasTo: rootOwnerWallet.address
+    })
+    .send({
+      from: rootOwnerWallet.address,
+      amount: everToNanoEver(2),
+      stateInit: tokenRootStateInit
+    }));
+
+  // Wait until all tx in the transactions tree are finished
+  // Throw error if any of tx in the tree aborted.
+  await waitUntilTransactionTreeFinished(deployTokenRootTX, true, []);
+
+
+  // There we will deploy tokenWallets for our
+
+  // We call deployWallet method of tokenRoot from
+  // our wallet by internal. This method marked as responsible.
+  // Responsible - means that the called method will return some answer.
+  // In this case deployWallet will return to the caller address of
+  // deployed tokenWallet contract. answerId - a hidden argument which
+  // one automatically added to the method signature. AnswerId - the
+  // id of the function target contract must call in the sender in
+  // callback. This is useful when some smart contract deploy wallet
+  // for himself and waiting for the address of the deployed tokenWallet.
+
+  // Because we call this method just from the wallet we will not use
+  // callback functionality, but we must specify the answerId. So
+  // we just set it to zero.
+
+  const deployTokenWalletForUser1TX = await extractError(tokenRoot.methods
+    .deployWallet({
+      answerId: 0,
+      walletOwner: user1Wallet.address,
+      deployWalletValue: everToNanoEver(0.1)
+    })
+    .send({
+      from: user1Wallet.address,
+      amount: everToNanoEver(1), // 1 ever
+    }));
+  await waitUntilTransactionTreeFinished(deployTokenWalletForUser1TX, true, []);
+
+  const deployTokenWalletForUser2TX = await extractError(tokenRoot.methods
+    .deployWallet({
+      answerId: 0,
+      walletOwner: user2Wallet.address,
+      deployWalletValue: everToNanoEver(0.1)
+    })
+    .send({
+      from: user2Wallet.address,
+      amount: '1000000000', // 1 ever
+    }));
+  await waitUntilTransactionTreeFinished(deployTokenWalletForUser2TX, true, []);
+
+  // We call tokenRoot method walletOf() locally,
+  // to get expected address of user1 tokenWallet contract.
+  // This function also market as responsible, so it is designed to be used
+  // by internal message, so we use call({responsible: true}) to guide sdk
+  // that it must use hack to run responsible method locally.
+  const {value0: user1TokenWalletAddress} = await tokenRoot.methods.walletOf(
+    {
+      answerId: 0,
+      walletOwner: user1Wallet.address
+    }).call({responsible: true});
+
+  // Same for the user2
+  const {value0: user2TokenWalletAddress} = await tokenRoot.methods.walletOf(
+    {
+      answerId: 0,
+      walletOwner: user1Wallet.address
+    }).call({responsible: true});
+
+  const user1TokenWallet = new ever.Contract(TokenWalletContract.abi, user1TokenWalletAddress);
+  const user2TokenWallet = new ever.Contract(TokenWalletContract.abi, user2TokenWalletAddress);
+
+  // Mint some tokens to the user1.
+  // Pay attention,
+  // we use recipient: user1Wallet.address
+  // not    recipient: user1TokenWallet.address
+  // Because we send tokens to the owner address,
+  // tokenWallet address will be calculated under the hood.
+  const mintTokensToUser1Tx = await extractError(tokenRoot.methods.mint({
+    amount: 100_000_000_000, // 100 * 10 ^ 9 = 100 tokens
+    recipient: user1Wallet.address,
+    deployWalletValue: everToNanoEver(0.1),
+    remainingGasTo: rootOwnerWallet.address,
+    notify: false,
+    payload: ''
+  }).send({
+    from: rootOwnerWallet.address,
+    amount: everToNanoEver(1),
+  }))
+
+  // We ignore failed transaction with error code 51
+  // Because 51 - constructor already called, it is happened because
+  // before mint we tried to deploy already deployed contract
+  await waitUntilTransactionTreeFinished(mintTokensToUser1Tx, true, [51]);
+
+  {
+    const {value0: totalSupply} = await tokenRoot.methods.totalSupply({answerId: 0}).call({responsible: true});
+    assert(totalSupply === '100000000000', 'total supply must be 100 tokens');
+    const {value0: walletBalance} = await user1TokenWallet.methods.balance({answerId: 0}).call({responsible: true});
+    assert(walletBalance === '100000000000', 'wallet1 balance must be 100 tokens');
+  }
+
+  // Let's transfer some tokens
+  const transfer1tx = await extractError(user1TokenWallet.methods.transfer({
+    amount: 50_000_000_000, // 50 * 10 ^ 9
+    recipient: user2Wallet.address,
+    deployWalletValue: everToNanoEver(0.1),
+    remainingGasTo: user1Wallet.address,
+    notify: false,
+    payload: ''
+  }).send({
+    from: user1Wallet.address,
+    amount: everToNanoEver(1)
+  }))
+  await waitUntilTransactionTreeFinished(transfer1tx, true, [51]);
+
+  {
+    const {value0: totalSupply} = await tokenRoot.methods.totalSupply({answerId: 0}).call({responsible: true});
+    assert(totalSupply === '100000000000', 'total supply must be 100 tokens');
+    const {value0: wallet1Balance} = await user1TokenWallet.methods.balance({answerId: 0}).call({responsible: true});
+    assert(wallet1Balance === '50000000000', 'wallet1 balance must be 50 tokens');
+    const {value0: wallet2Balance} = await user2TokenWallet.methods.balance({answerId: 0}).call({responsible: true});
+    assert(wallet2Balance === '50000000000', 'wallet2 balance must be 50 tokens');
+  }
+
+  // Okay now try to send transfer from wrong owner address
+  let wrongTransferTx = await extractError(user1TokenWallet.methods.transfer({
+    amount: 50_000_000_000, // 50 * 10 ^ 9
+    recipient: user2Wallet.address,
+    deployWalletValue: everToNanoEver(0.1),
+    remainingGasTo: user2Wallet.address,
+    notify: false,
+    payload: ''
+  }).send({
+    from: user2Wallet.address, // Wrong owner! must be user1Wallet
+    amount: everToNanoEver(1)
+  }))
+
+  {
+    let transferTransactionFailed = false;
+    try {
+      await waitUntilTransactionTreeFinished(wrongTransferTx, true, [51]);
+    } catch (e) {
+      assert(e.message === 'Transaction aborted with code 1000', 'Expect transaction will aborted with eror code "Wrong owner"');
+      transferTransactionFailed = true;
+    }
+    assert(transferTransactionFailed, 'Transfer transaction must fail because we send it from wrong owner');
+  }
+
+  // Now try to play with our token dice contract.
+  // Deploy the contract first.
+  const {
+    address: tokenDiceAddress,
+    stateInit: tokenDiceStateInit
+  } = await ever.getStateInit(TokenDiceContract.abi, {
+    tvc: TokenDiceContract.tvc,
+    workchain: 0,
+    initParams: {
+      tokenRoot_: tokenRoot.address,
+      owner_: rootOwnerWallet.address
+    }
+  });
+
+  const tokenDice = new ever.Contract(TokenDiceContract.abi, tokenDiceAddress);
+  const tokenDiceDeployTx = await extractError(
+    tokenDice.methods.constructor({}).send({
+      from: rootOwnerWallet.address,
+      amount: everToNanoEver(2),
+      stateInit: tokenDiceStateInit
+    })
+  )
+  await waitUntilTransactionTreeFinished(tokenDiceDeployTx, true, []);
+
+  // Mint some tokens to the tokenDice contract
+  const mintToTokenDiceTx = await extractError(tokenRoot.methods.mint({
+    amount: 10_000_000_000, // 10 * 10 ^ 9 = 10 tokens
+    recipient: tokenDice.address,
+    deployWalletValue: '0', // We will no deploy wallet, it is already deployed
+    remainingGasTo: rootOwnerWallet.address,
+    // We should notify token dice, because it must update local balance value.
+    notify: true,
+    payload: ''
+  }).send({
+    from: rootOwnerWallet.address,
+    amount: everToNanoEver(1),
+  }))
+  await waitUntilTransactionTreeFinished(mintToTokenDiceTx, true, []);
+
+  // Encode TvmCell payload which one we will send with tokens transfer
+  // to play.
+  const encodedDiceBetValue = (await ever.packIntoCell({
+    data: {
+      _bet_dice_value: "5",
+    },
+    structure: [
+      {name: '_bet_dice_value', type: 'uint8'},
+    ],
+  })).boc;
+
+  // try to play
+  for (let i = 0; i < 100; i++) {
+    let maxBet = new BigNumber((await tokenDice.methods.maxBet( {}).call({})).value0);
+    let ourBalance = new BigNumber((await user1TokenWallet.methods.balance({answerId: 0}).call({responsible: true})).value0);
+
+    const oneToken = new BigNumber(1).shiftedBy(9);
+
+    if (maxBet.lt(oneToken)) {
+      console.log('Dice contract has not enough balance to play');
+      break;
+    }
+    if (ourBalance.lt(oneToken)) {
+      console.log('We have not enough tokens to play');
+      break;
+    }
+
+    console.log('\nTry to roll a dice...', i);
+
+    let playTransferTx = await extractError(user1TokenWallet.methods.transfer({
+      amount: 1_000_000_000, // 1 * 10 ^ 9
+      recipient: tokenDice.address,
+      deployWalletValue: 0,
+      remainingGasTo: user1Wallet.address,
+      notify: true,
+      payload: encodedDiceBetValue
+    }).send({
+      from: user1Wallet.address,
+      amount: everToNanoEver(1)
+    }));
+
+    // Looking for roll transaction
+    const subscriber = new ever.Subscriber();
+    let playTx = await subscriber.trace(playTransferTx).filter(tx_in_tree => {
+      return tx_in_tree.account._address === tokenDice.address.toString();
+    }).first();
+
+    if (!playTx) {
+      throw new Error('Play transaction is not found!');
+    } else {
+      // Wait before all next transactions is finished
+      await subscriber.trace(playTx).finished();
+    }
+
+
+    let decoded_events = await tokenDice.decodeTransactionEvents({
+      transaction: playTx,
     });
 
-    await multisig.deploy({
-        useGiver: true,
-        initInput: {
-            owners: [`0x${keypair.public}`],
-            reqConfirms: 1,
-            lifetime: 3600
-        }})
-    return multisig;
+    if (decoded_events[0].data.bet === decoded_events[0].data.result) {
+      console.log('We won', (new BigNumber(decoded_events[0].data.prize).shiftedBy(-9)).toFixed(2), 'tokens');
+      let ourNewBalance = new BigNumber((await user1TokenWallet.methods.balance({answerId: 0}).call({responsible: true})).value0);
+      assert(ourNewBalance.eq(ourBalance.plus(new BigNumber(decoded_events[0].data.prize).minus(1_000_000_000))));
+      break;
+    } else {
+      console.log('We lose\n');
+    }
+
+    await sleep(1);
+  }
+  console.log('Tests successful');
 }
+
 
 (async () => {
-    const client = new TonClient({
-        network: {
-            // Local TON OS SE instance URL here
-            endpoints: [ "http://localhost" ]
-        }
-    });
-    try {
-        console.log("Hello localhost TON!");
-        await main(client);
-        process.exit(0);
-    } catch (error) {
-        if (error.code === 504) {
-            console.error(`Network is inaccessible. You have to start TON OS SE using \`tondev se start\`.\n If you run SE on another port or ip, replace http://localhost endpoint with http://localhost:port or http://ip:port in index.js file.`);
-        } else {
-            console.error(error);
-        }
-    }
-    client.close();
+  try {
+    console.log("Hello localhost EVER!");
+    await main();
+    process.exit(0);
+  } catch (error) {
+    console.error(error);
+  }
 })();
 
+async function waitUntilTransactionTreeFinished(first_tx, throw_error_on_any_aborted, ignoreErrorCodes) {
+  const subscriber = new ever.Subscriber();
+  // This stream will search for the first tx with an error
+  // or return null if all transactions parsed.
+  let tx_with_error = await subscriber.trace(first_tx).filter(tx_in_tree => {
+    return tx_in_tree.aborted === true && (!ignoreErrorCodes || !ignoreErrorCodes.includes(tx_in_tree.exitCode));
+  }).first();
+  if (tx_with_error)
+    throw new Error(`Transaction aborted with code ${tx_with_error.exitCode}`);
+}
+
+async function extractError(transactionPromise) {
+  return transactionPromise.then(res => {
+    if (res.transaction?.aborted || res.aborted) {
+      throw new Error(`Transaction ${res.transaction?.id.hash || res.id.hash} aborted with code ${res.transaction?.exitCode || res.exitCode}`);
+    }
+    return res;
+  });
+}
+
+function everToNanoEver(amount) {
+  return new BigNumber(amount).shiftedBy(9).toFixed(0);
+}
+
 function sleep(seconds) {
-    return new Promise(resolve => setTimeout(resolve, seconds * 1000));
+  return new Promise(resolve => setTimeout(resolve, seconds * 1000));
 }
 
 function assert(condition, error) {
-    if (!condition) {
-        throw new Error(error);
-    }
+  if (!condition) {
+    throw new Error(error);
+  }
 }
 
