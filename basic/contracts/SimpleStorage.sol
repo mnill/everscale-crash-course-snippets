@@ -1,4 +1,4 @@
-pragma ever-solidity >= 0.62.0;
+pragma ever-solidity >= 0.64.0;
 
 // This header informs sdk which will create the external message has to be signed by a key.
 // Also directing the compiler that it should only accepted signed external messages
@@ -13,7 +13,7 @@ contract SimpleStorage {
     uint variable = 0;
 
     constructor(uint _initial_value) public {
-        // We check that the conract has a pubkey set.
+        // We check that the contract has a pubkey set.
         // tvm.pubkey() - is essentially a static variable,
         // which is set at the moment of the creation of the contract,
         // We can set any pubkey here or just leave it empty.

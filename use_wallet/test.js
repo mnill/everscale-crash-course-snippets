@@ -167,10 +167,9 @@ async function main() {
 
   let constructorCallSuccess = false;
   const subscriber = new ever.Subscriber();
-  await subscriber.trace(tx).map(tx_in_tree => {
-    if (tx_in_tree.account._address === diceContract.address.toString() && tx_in_tree.aborted === false)
+  await subscriber.trace(tx).tap(tx_in_tree => {
+    if (tx_in_tree.account.equals(diceContract.address) && tx_in_tree.aborted === false)
       constructorCallSuccess = true;
-    return tx_in_tree;
   }).finished();
 
   if (!constructorCallSuccess) {
@@ -200,8 +199,7 @@ async function main() {
     let tx = await diceContract.methods.roll({_bet_dice_value: 5})
       .send({
         from: playerWallet.address,
-        amount: '1000000000', // 1 ever
-        stateInit: diceExpectedStateInit
+        amount: '1000000000' // 1 ever
       });
 
     // Looking for roll transaction
