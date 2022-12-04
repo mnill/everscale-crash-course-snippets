@@ -4,6 +4,7 @@ import {EverWalletAccount} from "everscale-standalone-client/nodejs";
 
 async function main() {
   const signer = (await locklift.keystore.getSigner("0"))!;
+  // The same EverWallet we deployed in script 0, because they are from one pubkey
   const diceOwnerWallet = await EverWalletAccount.fromPubkey({publicKey: signer.publicKey, workchain: 0});
 
   // Production ready tip-3 has a bit more constructor arguments than our

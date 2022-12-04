@@ -5,12 +5,13 @@ import BigNumber from "bignumber.js";
 
 async function main() {
     const signer = (await locklift.keystore.getSigner("0"))!;
+    // The same EverWallet we deployed in script 0, because they are from one pubkey
     const diceOwnerWallet = await EverWalletAccount.fromPubkey({publicKey: signer.publicKey, workchain: 0});
 
     await checkAccountBalanceIsAbove(diceOwnerWallet.address, new BigNumber(locklift.utils.toNano(4)));
 
     // Put there address of the token root the previous script.
-    const tokenRootAddress = '0:cb5f57378e82174ed95502b01df16235d8d94e974ce24a4dc8a10143f23c0c44';
+    const tokenRootAddress = '0:e56ffdc692d7fa68534bab03e62e13fc2fb7b2be8aff1da94fdbf580290eb952';
     await checkIsContractDeployed(new Address(tokenRootAddress), 'TokenRoot')
 
     // We will deploy TokenDice.sol by the internal message from our EverWallet
@@ -51,7 +52,7 @@ async function main() {
         })
     )
 
-    await checkIsContractDeployed(diceContractAddress, 'TokenDice')
+    await checkIsContractDeployed(diceContractAddress, 'TokenDice');
     console.log(`Token dice deployed at: ${diceContractAddress.toString()}`);
 }
 
