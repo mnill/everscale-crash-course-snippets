@@ -2,6 +2,7 @@
   "name": "basic",
   "version": "1.0.0",
   "dependencies": {
+    "everscale-crypto": "^0.1.1",
     "everscale-inpage-provider": "^0.3.45",
     "everscale-standalone-client": "^2.1.5"
   },
