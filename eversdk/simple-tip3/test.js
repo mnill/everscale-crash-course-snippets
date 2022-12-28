@@ -439,7 +439,7 @@ async function deployMultisigForPubkey(client, keypair) {
 (async () => {
     const client = new TonClient({
         network: {
-            // Local TON OS SE instance URL here
+            // Local EVER OS SE instance URL here
             endpoints: [ "http://localhost" ]
         }
     });
@@ -449,7 +449,7 @@ async function deployMultisigForPubkey(client, keypair) {
         process.exit(0);
     } catch (error) {
         if (error.code === 504) {
-            console.error(`Network is inaccessible. You have to start TON OS SE using \`tondev se start\`.\n If you run SE on another port or ip, replace http://localhost endpoint with http://localhost:port or http://ip:port in index.js file.`);
+            console.error(`Network is inaccessible. You have to start EVER OS SE using \`everdev se start\`.\n If you run SE on another port or ip, replace http://localhost endpoint with http://localhost:port or http://ip:port in index.js file.`);
         } else {
             console.error(error);
         }
