@@ -1,10 +1,10 @@
 pragma ever-solidity >= 0.62.0;
 
-import "./interfaces/ITokenRoot.sol";
-import "./interfaces/ITokenWallet.sol";
-import "./interfaces/IAcceptTokensTransferCallback.sol";
-import "./interfaces/IAcceptTokensMintCallback.sol";
-import "./libraries/TokenMsgFlag.sol";
+import "./interfaces/ITokenRoot.tsol";
+import "./interfaces/ITokenWallet.tsol";
+import "./interfaces/IAcceptTokensTransferCallback.tsol";
+import "./interfaces/IAcceptTokensMintCallback.tsol";
+import "./libraries/TokenMsgFlag.tsol";
 
 library DiceErrors {
   uint16 constant NOT_OWNER                                       = 1000;
@@ -35,7 +35,7 @@ contract TokenDice is IAcceptTokensTransferCallback, IAcceptTokensMintCallback {
     // Always reserve 1 ever on the contract balance
     tvm.rawReserve(1 ever, 0);
 
-    // Call responsible function deployWallet of TokenRoot.sol contract.
+    // Call responsible function deployWallet of TokenRoot.tsol contract.
     // And set callback to our onWalletDeployed function
     ITokenRoot(tokenRoot_).deployWallet{
       value: 0,

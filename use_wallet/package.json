@@ -7,7 +7,7 @@
     "everscale-standalone-client": "^2.1.5"
   },
   "scripts": {
-    "build": "mkdir -p artifacts && everdev sol compile -o ./artifacts contracts/Dice.sol",
+    "build": "mkdir -p artifacts && everdev sol compile -o ./artifacts contracts/Dice.tsol",
     "wrapjs": "everdev js wrap ./artifacts/Dice.abi.json",
     "test": "npm run build && npm run wrapjs && node test.js"
   }

@@ -444,7 +444,7 @@ async function deployMultisigForPubkey(client, keypair) {
         }
     });
     try {
-        console.log("Hello localhost TON!");
+        console.log("Hello localhost EVER!");
         await main(client);
         process.exit(0);
     } catch (error) {

@@ -8,7 +8,6 @@ const { getGiverKeypair, getTokensFromGiver } = require("./giver");
 const { TokenRootContract } = require("./artifacts/TokenRootContract.js")
 const { TokenWalletContract } = require("./artifacts/TokenWalletContract.js")
 const { TokenDiceContract } = require("./artifacts/TokenDiceContract.js")
-const { SetcodeMultisigContract } = require("./artifacts/SetcodeMultisigContract");
 
 
 const keyStore = new SimpleKeystore();

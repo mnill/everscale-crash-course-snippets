@@ -14,7 +14,7 @@ async function main() {
     const tokenRootAddress = '0:e56ffdc692d7fa68534bab03e62e13fc2fb7b2be8aff1da94fdbf580290eb952';
     await checkIsContractDeployed(new Address(tokenRootAddress), 'TokenRoot')
 
-    // We will deploy TokenDice.sol by the internal message from our EverWallet
+    // We will deploy TokenDice.tsol by the internal message from our EverWallet
     const TokenDice = locklift.factory.getContractArtifacts("TokenDice");
 
     // Calculate the state init for tvc and initial params.

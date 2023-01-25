@@ -42,7 +42,7 @@ async function main() {
   // which ones are not supported stateInit sending or other contracts
   // like dao. It is easier to deploy a token root by just
   // calling " the deploy method" of some contract rather to build an stateInit.
-  // factory - https://github.com/broxus/tip3/blob/master/contracts/additional/TokenFactory.sol
+  // factory - https://github.com/broxus/tip3/blob/master/contracts/additional/TokenFactory.tsol
 
   // We will use a simple deployment by an external message,
   // to show you how it is can be done with locklift.

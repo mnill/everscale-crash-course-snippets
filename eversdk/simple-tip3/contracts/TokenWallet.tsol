@@ -1,13 +1,13 @@
 pragma ever-solidity >= 0.62.0;
 
-import "./interfaces/ITokenWallet.sol";
-import "./interfaces/ITokenRoot.sol";
-import "./interfaces/IAcceptTokensTransferCallback.sol";
-import "./interfaces/IAcceptTokensMintCallback.sol";
+import "./interfaces/ITokenWallet.tsol";
+import "./interfaces/ITokenRoot.tsol";
+import "./interfaces/IAcceptTokensTransferCallback.tsol";
+import "./interfaces/IAcceptTokensMintCallback.tsol";
 
-import "./libraries/Errors.sol";
-import "./libraries/TokenGas.sol";
-import "./libraries/TokenMsgFlag.sol";
+import "./libraries/Errors.tsol";
+import "./libraries/TokenGas.tsol";
+import "./libraries/TokenMsgFlag.tsol";
 
 
 contract TokenWallet is ITokenWallet {

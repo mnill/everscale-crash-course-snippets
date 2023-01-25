@@ -8,7 +8,7 @@
     "bignumber.js": "^9.1.0"
   },
   "scripts": {
-    "build": "mkdir -p artifacts && everdev sol compile -o ./artifacts contracts/Dice.sol",
+    "build": "mkdir -p artifacts && everdev sol compile -o ./artifacts contracts/Dice.tsol",
     "wrapjs": "everdev js wrap ./artifacts/Dice.abi.json && everdev js wrap -o ../../../artifacts/SetcodeMultisigContract.js ./contracts/third_party/multisig2/SetcodeMultisig.abi.json",
     "test": "npm run build && npm run wrapjs && node test.js"
   }

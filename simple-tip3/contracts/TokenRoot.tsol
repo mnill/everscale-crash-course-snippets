@@ -1,10 +1,10 @@
 pragma ever-solidity >= 0.62.0;
 
-import "./TokenWallet.sol";
-import "./interfaces/ITokenRoot.sol";
-import "./libraries/Errors.sol";
-import "./libraries/TokenGas.sol";
-import "./libraries/TokenMsgFlag.sol";
+import "./TokenWallet.tsol";
+import "./interfaces/ITokenRoot.tsol";
+import "./libraries/Errors.tsol";
+import "./libraries/TokenGas.tsol";
+import "./libraries/TokenMsgFlag.tsol";
 
 
 contract TokenRoot is ITokenRoot {
@@ -129,7 +129,7 @@ contract TokenRoot is ITokenRoot {
     // AnswerID is not a unique id of the call, this is just a functionID that one must
     // Be called in the back message with variables this function return.
 
-    // Look at ThirdParty.sol for example how to call responsible function from the another smart contract
+    // Look at ThirdParty.tsol for example how to call responsible function from the another smart contract
 
     // So the line below will be compiled to something like (pseudocode)
     // msg.sender.call({ value: 0,

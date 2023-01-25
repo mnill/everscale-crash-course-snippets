@@ -7,7 +7,7 @@
     "@eversdk/lib-node": "^1.37.2"
   },
   "scripts": {
-    "build": "mkdir -p artifacts && everdev sol compile -o ./artifacts contracts/SimpleStorage.sol",
+    "build": "mkdir -p artifacts && everdev sol compile -o ./artifacts contracts/SimpleStorage.tsol",
     "wrapjs": "everdev js wrap ./artifacts/SimpleStorage.abi.json",
     "test": "npm run build && npm run wrapjs && node test.js"
   }
